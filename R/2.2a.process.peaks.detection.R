@@ -86,9 +86,17 @@ MSI.detectpeaks <- function(
     )
   )
 
+if(unlist(packageVersion("Cardinal"))[1] < 4) {
+    Cardinal::setCardinalNumBlocks(
+      n = n.chunk
+    )
+  }
+
+if(unlist(packageVersion("Cardinal"))[1] > 4) {
   Cardinal::setCardinalNChunks(
     n = n.chunk
   )
+}
 
   ### Align spectra (for every pixel), filter missing or low intensity peaks
   ### (<0.5% detected across all pixels; roughly equivalent to a peak that is detected in 10% of pixels in an individual image for
@@ -157,12 +165,8 @@ MSI.detectpeaks <- function(
 
   return(
     list(
-      "Processed.Peaks" = d.peaks,
-      "Parallel.settings" = Cardinal::getCardinalBPPARAM(),
-      "Code.blocks" = Cardinal::getCardinalNumBlocks(),
-      "Processing.time" = proc.time()
+      "Processed.Peaks" = d.peaks
       )
-    )
 
   }
 
