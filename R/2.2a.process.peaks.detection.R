@@ -131,17 +131,19 @@ MSI.detectpeaks <- function(
     )
 
   d.peaks <- Cardinal::process(
-    Cardinal::peakFilter(
-      Cardinal::process(
-        Cardinal::peakAlign(
-          d,
-          tolerance = list.p[["resolution"]],
-          units = "ppm"
-          )
-      ),
-      freq.min = n.freq
+    Cardinal::peakAlign(
+      d,
+      tolerance = list.p[["resolution"]],
+      units = "ppm"
+      )
     )
-  )
+
+  d.peaks <- Cardinal::process(
+    Cardinal::peakFilter(
+      d.peaks,
+      freq.min = n.freq
+      )
+    )
 
   return(
     list(
