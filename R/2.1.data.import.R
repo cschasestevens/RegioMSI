@@ -136,6 +136,12 @@ MSI.LoadAll <- function(list.p){
 
         }
 
+        if(class(d) == "MSProcessedImagingExperiment") {
+
+          Cardinal::centroided(d) <- F
+
+        }
+
         return(d)
 
       }
