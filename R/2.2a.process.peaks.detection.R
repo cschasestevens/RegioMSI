@@ -143,7 +143,6 @@ MSI.detectpeaks <- function(
       tolerance = list.p[["resolution"]],
       units = "ppm"
       )
-    )
 
   d.peaks <- Cardinal::subsetFeatures(
     d.peaks,
