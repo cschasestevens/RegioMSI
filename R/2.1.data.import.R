@@ -130,7 +130,7 @@ MSI.LoadAll <- function(list.p){
           units = "ppm"
         )
 
-        if(class(d) == "MSProcessedImagingExperiment") {
+        if(class(d) == "MSImagingExperiment") {
 
           Cardinal::centroided(d) <- F
 

@@ -124,7 +124,7 @@ MSI.detectpeaks <- function(
     )
 
   d <- do.call(
-    Cardinal::cbind,
+    BiocGenerics::cbind,
     list.d
     )
 
