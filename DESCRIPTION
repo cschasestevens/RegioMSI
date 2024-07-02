@@ -16,6 +16,7 @@ Imports:
   ggsci,
   viridis,
   Cardinal (>= 4.4.1),
+  BiocGenerics,
   BiocParallel,
   fuzzyjoin,
   parallel,

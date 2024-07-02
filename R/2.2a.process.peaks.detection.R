@@ -123,9 +123,11 @@ MSI.detectpeaks <- function(
       )
     )
 
+  msi.d <- lapply(seq.int(1,length(list.d),1),function(x) list.d[[x]])
+
   d <- do.call(
     BiocGenerics::cbind,
-    list.d
+    msi.d
     )
 
   d.peaks <- Cardinal::process(
