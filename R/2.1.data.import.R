@@ -119,7 +119,7 @@ MSI.LoadAll <- function(list.p){
             sep = ""
           ),
           # load dataset as sparse matrix
-          memory = T,
+          memory = F,
           # mass range
           mass.range = c(
             list.p$mz.range.low,
