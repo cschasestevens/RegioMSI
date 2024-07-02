@@ -123,26 +123,31 @@ MSI.detectpeaks <- function(
       )
     )
 
-  msi.d <- lapply(seq.int(1,length(list.d),1),function(x) list.d[[x]])
+  msi.d <- lapply(
+    seq.int(
+      1,
+      length(list.d),
+      1
+      ),
+    function(x)
+      list.d[[x]]
+    )
 
   d <- do.call(
     BiocGenerics::cbind,
     msi.d
     )
 
-  d.peaks <- Cardinal::process(
-    Cardinal::peakAlign(
+  d.peaks <- Cardinal::peakAlign(
       d,
       tolerance = list.p[["resolution"]],
       units = "ppm"
       )
     )
 
-  d.peaks <- Cardinal::process(
-    Cardinal::peakFilter(
-      d.peaks,
-      freq.min = n.freq
-      )
+  d.peaks <- Cardinal::subsetFeatures(
+    d.peaks,
+    freq > n.freq
     )
 
   return(
