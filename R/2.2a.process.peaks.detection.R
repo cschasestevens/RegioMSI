@@ -86,7 +86,7 @@ MSI.detectpeaks <- function(
     )
   )
 
-  Cardinal::setCardinalNumBlocks(
+  Cardinal::setCardinalNChunks(
     n = n.chunk
   )
 

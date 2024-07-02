@@ -97,7 +97,7 @@ MSI.binpeaks <- function(
     )
   )
 
-  Cardinal::setCardinalNumBlocks(
+  Cardinal::setCardinalNChunks(
     n = n.chunk
   )
 
