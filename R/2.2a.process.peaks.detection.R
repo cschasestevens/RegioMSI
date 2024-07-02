@@ -138,6 +138,12 @@ MSI.detectpeaks <- function(
     msi.d
     )
 
+  d.peaks <- Cardinal::peakPick(
+    d,
+    method = "diff",
+    SNR = 3
+    )
+
   d.peaks <- Cardinal::peakAlign(
       d,
       tolerance = list.p[["resolution"]],
