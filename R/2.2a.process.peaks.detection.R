@@ -146,22 +146,39 @@ if(unlist(packageVersion("Cardinal"))[1] > 4) {
     msi.d
     )
 
-  d.peaks <- Cardinal::peakPick(
-    d,
-    method = "diff",
-    SNR = 3
+  if(unlist(packageVersion("Cardinal"))[1] < 4) {
+    d.peaks <- Cardinal::process(
+      Cardinal::peakFilter(
+        Cardinal::process(
+          Cardinal::peakAlign(
+            d,
+            tolerance = list.p[["resolution"]],
+            units = "ppm"
+          )
+        ),
+        freq.min = n.freq
+      )
+    )
+  }
+
+  if(unlist(packageVersion("Cardinal"))[1] > 4) {
+    d.peaks <- Cardinal::peakPick(
+      d,
+      method = "diff",
+      SNR = 3
     )
 
-  d.peaks <- Cardinal::peakAlign(
+    d.peaks <- Cardinal::peakAlign(
       d,
       tolerance = list.p[["resolution"]],
       units = "ppm"
-      )
-
-  d.peaks <- Cardinal::subsetFeatures(
-    d.peaks,
-    freq > n.freq
     )
+
+    d.peaks <- Cardinal::subsetFeatures(
+      d.peaks,
+      freq > n.freq
+    )
+  }
 
   return(
     list(
