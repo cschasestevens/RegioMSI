@@ -166,7 +166,7 @@ if(unlist(packageVersion("Cardinal"))[1] > 4) {
   return(
     list(
       "Processed.Peaks" = d.peaks
-      )
+      ))
 
   }
 
