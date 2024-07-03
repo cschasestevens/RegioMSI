@@ -162,11 +162,6 @@ if(unlist(packageVersion("Cardinal"))[1] > 4) {
   }
 
   if(unlist(packageVersion("Cardinal"))[1] > 4) {
-    d.peaks <- Cardinal::peakPick(
-      d,
-      method = "diff",
-      SNR = 3
-    )
 
     d.peaks <- Cardinal::peakAlign(
       d,
@@ -182,7 +177,8 @@ if(unlist(packageVersion("Cardinal"))[1] > 4) {
 
   return(
     list(
-      "Processed.Peaks" = d.peaks
+      "Processed.Peaks" = d.peaks,
+      "num.features" = length(d.peaks)
       ))
 
   }
