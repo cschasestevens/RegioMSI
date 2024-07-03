@@ -146,7 +146,7 @@ if(unlist(packageVersion("Cardinal"))[2] >= 6) {
     msi.d
     )
 
-  if(unlist(packageVersion("Cardinal"))[1] < 4) {
+  if(unlist(packageVersion("Cardinal"))[2] < 6) {
     d.peaks <- Cardinal::process(
       Cardinal::peakFilter(
         Cardinal::process(
@@ -161,7 +161,7 @@ if(unlist(packageVersion("Cardinal"))[2] >= 6) {
     )
   }
 
-  if(unlist(packageVersion("Cardinal"))[1] > 4) {
+  if(unlist(packageVersion("Cardinal"))[2] > 6) {
 
     d.peaks <- Cardinal::peakAlign(
       d,
