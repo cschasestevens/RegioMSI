@@ -99,7 +99,7 @@ MSI.detectpeaks <- function(
     list(
       "data" = d,
       "chunks" = n.chunk,
-      "min.freq" = freq
+      "min.freq" = n.freq
       )
   )
 
