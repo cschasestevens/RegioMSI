@@ -161,7 +161,7 @@ if(unlist(packageVersion("Cardinal"))[2] >= 6) {
     )
   }
 
-  if(unlist(packageVersion("Cardinal"))[2] > 6) {
+  if(unlist(packageVersion("Cardinal"))[2] >= 6) {
 
     d.peaks <- Cardinal::peakAlign(
       d,
