@@ -63,43 +63,43 @@ MSI.binpeaks <- function(
     )
   }
 
-  # Processing parameters
-  ifelse(
-    sum(
-      unlist(
-        lapply(
-          list.d,
-          function(x) nrow(
-            Cardinal::coord(x)
-          )
-        )
-      )
-    )/
-      100 <
-      2000,
-    n.chunk <- 100,
-    ifelse(
-      sum(
-        unlist(
-          lapply(
-            list.d,
-            function(x)
-              nrow(
-                Cardinal::coord(x)
-              )
-          )
-        )
-      )/
-        1000 <
-        2000,
-      n.chunk <- 1000,
-      n.chunk <- 10000
-    )
-  )
-
-  Cardinal::setCardinalNChunks(
-    n = n.chunk
-  )
+  # # Processing parameters
+  # ifelse(
+  #   sum(
+  #     unlist(
+  #       lapply(
+  #         list.d,
+  #         function(x) nrow(
+  #           Cardinal::coord(x)
+  #         )
+  #       )
+  #     )
+  #   )/
+  #     100 <
+  #     2000,
+  #   n.chunk <- 100,
+  #   ifelse(
+  #     sum(
+  #       unlist(
+  #         lapply(
+  #           list.d,
+  #           function(x)
+  #             nrow(
+  #               Cardinal::coord(x)
+  #             )
+  #         )
+  #       )
+  #     )/
+  #       1000 <
+  #       2000,
+  #     n.chunk <- 1000,
+  #     n.chunk <- 10000
+  #   )
+  # )
+  #
+  # Cardinal::setCardinalNChunks(
+  #   n = n.chunk
+  # )
 
 
 
@@ -133,15 +133,32 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                  ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+                )
+              )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
             )
-          )
+          }
+
           # Return processed sample
           return(d.p)
 
@@ -172,15 +189,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
@@ -211,15 +244,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
@@ -254,15 +303,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
@@ -313,15 +378,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
@@ -352,15 +433,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
@@ -391,15 +488,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
@@ -446,15 +559,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
@@ -485,15 +614,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
@@ -542,15 +687,31 @@ MSI.binpeaks <- function(
         ),
         function(x) {
           # Bin peaks to convert profile to centroid
-          d.p <- Cardinal::process(
-            Cardinal::peakBin(
-              list.d[[x]],
-              ref = Cardinal::mz(
-                d.peaks
-              ),
-              type = "height"
+          if(unlist(packageVersion("Cardinal"))[2] >= 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakPick(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height",
+                tolerance = 5,
+                units = "ppm"
+              )
             )
-          )
+          }
+
+          if(unlist(packageVersion("Cardinal"))[2] < 6) {
+            d.p <- Cardinal::process(
+              Cardinal::peakBin(
+                list.d[["Data.files"]][[x]],
+                ref = Cardinal::mz(
+                  d.peaks[["Processed.Peaks"]]
+                ),
+                type = "height"
+              )
+            )
+          }
           # Return processed sample
           return(d.p)
 
