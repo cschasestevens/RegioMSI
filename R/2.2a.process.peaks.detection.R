@@ -86,13 +86,13 @@ MSI.detectpeaks <- function(
     )
   )
 
-if(unlist(packageVersion("Cardinal"))[1] < 4) {
+if(unlist(packageVersion("Cardinal"))[2] < 6) {
     Cardinal::setCardinalNumBlocks(
       n = n.chunk
     )
   }
 
-if(unlist(packageVersion("Cardinal"))[1] > 4) {
+if(unlist(packageVersion("Cardinal"))[2] >= 6) {
   Cardinal::setCardinalNChunks(
     n = n.chunk
   )

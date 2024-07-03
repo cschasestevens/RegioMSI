@@ -15,7 +15,7 @@ Imports:
   dplyr,
   ggsci,
   viridis,
-  Cardinal (>= 4.4.1),
+  Cardinal (>= 3.6.2),
   BiocGenerics,
   BiocParallel,
   fuzzyjoin,
