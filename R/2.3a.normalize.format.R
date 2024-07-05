@@ -114,7 +114,9 @@ MSI.norm.format <- function(msi.d,an.list,p.md) {
 
   ## bring spectra into memory
   d.mat <- t(
-    as.matrix(Cardinal::spectra(d))
+    Cardinal::as.matrix(
+      Cardinal::spectra(d)
+      )
     )
 
   ## Save objects for downstream analysis
