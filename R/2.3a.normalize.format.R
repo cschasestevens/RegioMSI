@@ -95,16 +95,16 @@ MSI.norm.format <- function(msi.d,an.list,p.md) {
   md.samp <- data.frame(
     "ID" = Cardinal::run(d),
     "pixel" = Cardinal::pixels(d),
-    "X" = d@elementMetadata@coord[["x"]],
-    "Y" = d@elementMetadata@coord[["y"]]
+    "X" = d@elementMetadata[["x"]],
+    "Y" = d@elementMetadata[["y"]]
     )
 
   md.samp <- dplyr::full_join(
     data.frame(
       "ID" = Cardinal::run(d),
       "pixel" = Cardinal::pixels(d),
-      "X" = d@elementMetadata@coord[["x"]],
-      "Y" = d@elementMetadata@coord[["y"]]
+      "X" = d@elementMetadata[["x"]],
+      "Y" = d@elementMetadata[["y"]]
       ),
     d.group,
     by = "ID"
