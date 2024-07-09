@@ -1,0 +1,211 @@
+#### Intrasample processing of MSI data (based on Cardinal R package) ####
+
+#---- Peak Detection ----
+getCardinalBPPARAM()
+setCardinalBPPARAM(
+  MulticoreParam(
+    workers = 4,
+    progressbar = T
+    )
+  )
+getCardinalBPPARAM()
+
+getCardinalNumBlocks()
+ifelse(
+  sum(
+    unlist(
+      lapply(
+        list.d,
+        function(x) nrow(
+          coord(x)
+          )
+        )
+      )
+    )/
+    100 < 
+    2000,
+  n.chunk <- 100,
+  ifelse(
+    sum(
+      unlist(
+        lapply(
+          list.d,
+          function(x) 
+            nrow(
+              coord(x)
+              )
+          )
+        )
+      )/
+      1000 < 
+      2000,
+    n.chunk <- 1000,
+    n.chunk <- 10000
+    )
+  )
+
+setCardinalNumBlocks(
+  n = n.chunk
+  )
+getCardinalNumBlocks()
+
+
+### Align spectra (for every pixel), filter missing or low intensity peaks 
+### (<0.5% detected across all pixels; roughly equivalent to a peak that is detected in 10% of pixels in an individual image for
+### a dataset that includes 12 images)
+### Output is the consensus list of aligned peaks detected for all samples
+### Use this output as a reference peak list for binning profile spectra to a single centroided spectra suitable for comparing across samples
+### Then normalize the binned spectra by LOESS and(or) TIC to correct for differences in intensity across sample run
+
+### combine MSI data
+n.freq <- (((sum(
+  unlist(
+    lapply(
+      list.d,
+      function(x) nrow(
+        coord(x)
+        )
+      )
+    )
+  )/
+  length(
+    list.d
+    )))*0.1)/(
+      sum(
+        unlist(
+          lapply(
+            list.d,
+            function(x) nrow(
+              coord(x)
+              )
+            )
+          )
+        )
+      )
+
+
+
+d <- do.call(cbind,list.d)
+proc.time()
+d.peaks <- process(
+  peakFilter(
+    peakAlign(
+      d,
+      tolerance = list.p[["resolution"]],
+      units = "ppm" 
+      ),
+    freq.min = n.freq
+    )
+  )
+
+### output stats
+proc.time()
+d.peaks
+getCardinalBPPARAM()
+getCardinalNumBlocks()
+
+saveRDS(
+  d.peaks,
+  file = "2.2.process.peaks.pos.rds"
+  )
+
+
+### Check alignment
+plot(
+  d.peaks,
+  pixel = (
+    median(
+      d@elementMetadata@coord$x
+    ) -
+      25
+  ):
+    (
+      median(
+        d@elementMetadata@coord$x
+      ) +
+        25
+    ),
+  xlim = c(
+    300,
+    1300
+  ),
+  key = F,
+  superpose = T
+)
+
+
+#---- Spectra processing ----
+
+## Perform peak binning to convert profile spectra to centroid (drastically reduces RAM consumption)
+## Tune workers to RAM limits for parallel processing (recommend >4 for 128 Gb of RAM)
+getCardinalBPPARAM()
+setCardinalBPPARAM(
+  SerialParam()
+)
+# setCardinalBPPARAM(
+#   MulticoreParam(
+#     workers = 18,
+#     progressbar = T
+#   )
+# )
+setCardinalBPPARAM(
+  SnowParam(
+    workers = 18,
+    progressbar = T
+  )
+)
+getCardinalBPPARAM()
+getCardinalNumBlocks()
+proc.time()
+
+gc(reset = T)
+
+### Bin
+d.proc <- setNames(
+  lapply(
+    seq(
+      1:length(
+        list.s[["ID"]]
+        )
+      ),
+    function(x) {
+      # Bin peaks to convert profile to centroid
+      d.proc1 <- process(
+        peakBin(
+          list.d[[x]],
+          ref = mz(
+            d.peaks
+            ),
+          type = "height"
+          )
+        )
+      # Reset memory
+      gc(reset = T)
+      # Return processed sample
+      return(d.proc1)
+  
+      }
+    ),
+  c(
+    list.s[["Sample.imzML"]]
+    )
+  )
+
+## output stats
+proc.time()
+d.proc
+getCardinalBPPARAM()
+getCardinalNumBlocks()
+
+saveRDS(
+  list.d.proc,
+  file = "2.2.processed.pos.rds"
+  )
+
+
+
+#### IMPORTANT: align m/z values for centroid spectra after peak binning is complete to obtain unified list
+#### peaks across all samples
+
+
+

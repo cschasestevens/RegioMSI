@@ -1,0 +1,26 @@
+{
+    "id": "2D2D6784",
+    "path": "~/Dev/RegioMSI/R/4.2.chemrich.R",
+    "project_path": "R/4.2.chemrich.R",
+    "type": "r_source",
+    "hash": "352996382",
+    "contents": "",
+    "dirty": false,
+    "created": 1719853287375.0,
+    "source_on_save": false,
+    "relative_order": 8,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "5,45",
+        "scrollLine": "0"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1719939949,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1719939949916,
+    "read_only": false,
+    "read_only_alternatives": []
+}
