@@ -1,38 +1,41 @@
 #' Peak Annotation of MSI Data
 #'
-#' Annotates binned peak lists by matching m/z values in complimentary LC-MS/MS data acquired
-#' separately from an MSI experiment. Defaults to matching m/z values between MSI and LC-MS/MS data within 10 mDa.
+#' Annotates processed peaks by matching m/z values
+#' from a reference annotation list, such as a complimentary
+#' LC-MS/MS dataset acquired independently from an MSI experiment.
+#' Defaults to matching m/z values between MSI and reference data within 10 mDa.
 #'
-#' @param pk.list A data frame containing a data frame of processed peaks and processing details created by MSI.detectpeaks().
-#' @param an.list A data frame containing annotated MSI peaks matched to a separate LC-MS/MS dataset.
-#' @return A filtered data frame and a table written to the disk containing annotated MSI peaks matched to a separate LC-MS/MS dataset.
+#' @param ldp A data frame of processed peaks.
+#' @param la A reference m/z list, provided as a data frame.
+#' @return A reference-matched data frame containing annotated MSI peaks.
 #' @examples
-#' list.d <- MSI.LoadAll(list.p)
-#' d.peaks <- MSI.binpeaks(list.d[["Sample.Info"]],list.d[["Data.files"]],d.peaks,TRUE)
-#' list.anno <- read.table("annotations.neg.txt",sep = "\t",header = T)
-#' MSI.annotate.peaks(d.peaks,list.anno)
+#'
+#' # d2a <- msi_peak_anno(
+#' #   ldp = d2,
+#' #   la = an1
+#' # )
 #'
 #' @export
-MSI.annotate.peaks <- function(
-  pk.list,
-  an.list
-  ){
+msi_peak_anno <- function(
+  ldp,
+  la
+) {
   # Load peak and LC-MS/MS annotation list
-  d.peaks <- pk.list
-  list.anno <- an.list
+  d_peaks <- ldp[["Processed.Peaks"]]
+  list_anno <- la
 
   # Extract detected peaks and peak intensities
-  list.f <- data.frame(
-    "Feature" = Cardinal::features(d.peaks),
-    "mz" = Cardinal::mz(d.peaks),
-    "Count" = d.peaks@featureData[["count"]],
-    "Frequency" = d.peaks@featureData[["freq"]]
+  list_f <- data.frame(
+    "Feature" = Cardinal::features(d_peaks),
+    "mz" = Cardinal::mz(d_peaks),
+    "Count" = d_peaks@featureData[["count"]],
+    "Frequency" = d_peaks@featureData[["freq"]]
   )
 
-  list.anno.filt <- setNames(
-    list.anno[!grepl(
+  list_anno_filt <- setNames(
+    list_anno[!grepl(
       "iSTD",
-      list.anno[["Metabolite.name"]]
+      list_anno[["Metabolite.name"]]
     ),
     c("Metabolite.name",
       "Adduct.type",
@@ -46,111 +49,42 @@ MSI.annotate.peaks <- function(
     )
   )
 
-
   ## Assign IDs based on LC-MS/MS data
-  list.f.anno <- setNames(
+  list_f_anno <- setNames(
     dplyr::select(
       fuzzyjoin::fuzzy_join(
-        list.f,
-        list.anno.filt,
+        list_f,
+        list_anno_filt,
         by = "mz",
         match_fun = ~ abs(.x - .y) < 0.01
       ),
       c("Feature",
-        "Source","Name",
+        "Source", "Name",
         "Adduct",
-        "mz.x","mz.y",
-        "Count","Frequency"
+        "mz.x", "mz.y",
+        "Count", "Frequency"
       )
     ),
     c(
       "Feature",
-      "Source","Name","Adduct",
-      "mz.timsTOF","mz.LCMS",
-      "Count","Frequency"
+      "Source", "Name", "Adduct",
+      "mz.timsTOF", "mz.LCMS",
+      "Count", "Frequency"
     )
   )
-  list.f.anno <- list.f.anno[!duplicated(list.f.anno),]
-
+  list_f_anno <- list_f_anno[!duplicated(list_f_anno), ]
   ## Return unknowns
-  list.f.unk <- list.f[list.f[-c(list.f.anno$mz.timsTOF),"mz"],]
-
-  ### Save annotation lists
-  write.table(
-    list.f.anno,
-    "data.annotated.neg.txt",
-    col.names = T,
-    row.names = F,
-    sep = "\t"
-  )
-  write.table(
-    list.f.unk,
-    "data.unknown.neg.txt",
-    col.names = T,
-    row.names = F,
-    sep = "\t"
-  )
+  list_f_unk <- list_f[list_f[-c(list_f_anno$mz.timsTOF), "mz"], ]
+  ## Return filtered data
+  list_sub <- unique(list_f_anno[["Feature"]])
+  list_d_anno <- d_peaks[c(list_sub), ]
 
   return(
     list(
-      "Annotated" = list.f.anno,
-      "Unassigned" = list.f.unk
-      )
+      "Data.filtered" = list_d_anno,
+      "Data.original" = d_peaks,
+      "Annotated" = list_f_anno,
+      "Unassigned" = list_f_unk
     )
-
-  }
-
-
-
-
-
-#' Peak Annotation of Binned MSI Data
-#'
-#' Annotates binned MSI data and filters peaks for removing duplicate matched m/z values in complimentary LC-MS/MS data acquired
-#' separately from an MSI experiment.
-#'
-#' @param proc.data Processed MSImagingExperiment object.
-#' @param an.list.filt A filtered data frame containing annotated MSI peaks from MSI.annotate.peaks().
-#' @return A combined Cardinal MSImagingExperiment containing annotated features for all study samples.
-#' @examples
-#' d.anno <- MSI.data.filter(d3,list.annotated[[1]])
-#'
-#' ### Verify that all samples have been correctly annotated
-#' Cardinal::imageData(d.anno)
-#' Cardinal::features(d.anno)
-#' Cardinal::pixelData(d.anno)
-#' Cardinal::run(d.anno)
-#' Cardinal::spectra(
-#'   d.anno,
-#'   "intensity"
-#'   )[,1:25]
-#'
-#' ### Save data
-#' saveRDS(
-#'   d.anno,
-#'   "data.processed.rds"
-#'   )
-#' gc(reset = T)
-#'
-#' @export
-MSI.data.filter <- function(
-    proc.data,
-    an.list.filt
-  ) {
-  ### Load data
-  list.d <- proc.data
-  list.f.anno <- an.list.filt
-
-  ### subset by annotation list
-  list.sub <- unique(
-    list.f.anno[["Feature"]]
-    )
-  list.d.anno <- list.d[c(list.sub),]
-
-  return(list.d.anno)
-
-  }
-
-
-
-
+  )
+}

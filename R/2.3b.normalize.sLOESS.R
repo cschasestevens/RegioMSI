@@ -38,6 +38,9 @@
 #' )
 #'
 #' @export
+msi_data_norm <- function(dm, feat, pix) {
+  
+}
 MSI.norm.none <- function(msi.mat,f,p) {
   d <- msi.mat
   md.feat <- f

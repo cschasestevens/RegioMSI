@@ -1,0 +1,136 @@
+---
+title: "RegioMSI v1.1 tutorial"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{tutorial}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# RegioMSI v1.1: Parallel processing and analysis of mass spectrometry imaging-based metabolomics datasets
+
+### **Important:**
+#### - Set **"eval ="** to **"F"** to skip execution of code chunk.
+#### - Recommended hardware specs: Windows >10 with 128Gb of RAM OR Linux Ubuntu >22.04 with 128Gb of RAM
+
+## 1.1. Installation of package and dependencies
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+# Install devtools and BiocManager
+install.packages("devtools")
+install.packages("BiocManager")
+
+# Install RegioMSI
+## NOTE: Bioconductor libraries are not installed by default; see package
+## documentation for further details on Bioconductor packages required by
+## RegioMSI
+devtools::install_github(
+  "cschasestevens/RegioMSI",
+  ref = "master",
+  build_vignettes = TRUE
+)
+
+# Install Bioconductor packages with the following:
+BiocManager::install("Cardinal")
+
+## Ensure that working directory is set to project folder with setwd()
+## The project folder should contain the following subfolders:
+## analysis, processed, ref, and data
+```
+
+## 2.1. Data Import
+#### Loads all .imzML files from specified folder 
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+library(RegioMSI)
+# Dataset input parameters
+lp1 <- msi_input_param(
+  dp = "data_test/pos/",
+  pol = "pos",
+  mz_range = c(300, 1300),
+  mz_res = 5
+)
+# Load all .imzML
+d <- msi_load_data(lp1)
+lp1
+d
+names(d)
+```
+
+## 2.2. Processing: Peak Detection, Alignment, Binning, and Annotation
+#### Performs peak detection, alignment, binning, peak annotation, and assignment for all study samples. Detection and alignment are performed simultaneously to produce a single peak list for the entire dataset. Peaks from each sample are binned to the resulting reference list to convert data from profile to centroid and are used for downstream analyses. Peak annotations are optional but generally correspond to a list of compounds validated by LC-MS/MS.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+#---- Peak detection ----
+# Perform all peak processing;
+# Previous versions of Cardinal required
+# a separate peak binning step, which is
+# no longer applicable in newer versions
+d2 <- msi_peak_proc(
+  ld = d[["Data.files"]],
+  lp = lp1,
+  parl = TRUE,
+  core_perc = 0.2
+)
+saveRDS(
+  d2[["Processed.Peaks"]],
+  paste("analysis/data.", lp1[["polarity"]], ".processed.peaks.rds", sep = "")
+)
+d2
+names(d2)
+
+#---- Peak annotation ----
+# Requires:
+# - Processed peaks from previous step
+# - annotation text file for assigning annotations to peaks
+
+# Load annotation file (see example list for formatting help)
+an1 <- read.table(
+  "ref/annotations.pos.txt",
+  sep = "\t",
+  header = TRUE
+)
+## Annotate and filter known peaks
+d2a <- msi_peak_anno(
+  ldp = d2,
+  la = an1
+)
+names(d2a)
+d2a[["Data.filtered"]]
+d2a[["Data.original"]]
+## Save lists
+write.table(
+  d2a[["Annotated"]],
+  paste("analysis/table.", lp1[["polarity"]], ".annotated.txt", sep = ""),
+  col.names = TRUE,
+  row.names = FALSE,
+  sep = "\t"
+)
+write.table(
+  d2a[["Unassigned"]],
+  paste("analysis/table.", lp1[["polarity"]], ".unknown.txt", sep = ""),
+  col.names = TRUE,
+  row.names = FALSE,
+  sep = "\t"
+)
+
+# Check data
+Cardinal::imageData(d2a[["Data.filtered"]])
+Cardinal::features(d2a[["Data.filtered"]])
+Cardinal::pixelData(d2a[["Data.filtered"]])
+Cardinal::run(d2a[["Data.filtered"]])
+Cardinal::spectra(
+  d2a[["Data.filtered"]],
+  "intensity"
+)[, 1:25]
+
+### Save data
+saveRDS(
+  d2a[["Data.filtered"]],
+  paste("analysis/data.", lp1[["polarity"]], ".processed.anno.rds", sep = "")
+)
+```

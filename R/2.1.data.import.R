@@ -1,180 +1,145 @@
-
 #' Input Parameters for Loading MSI Datasets in .imzML Format
 #'
 #' Specifies input parameters to be read into R by the Cardinal package.
-#' The user must provide the path to paired .imzML and .ibd files, if applicable,
-#' for subsequent loading as a single list of MSImagingExperiment objects created
-#' by Cardinal.
+#' The user must provide the path to a folder containing .imzml files,
+#' for creating a single list of MSImagingExperiment objects using
+#' Cardinal. See doi:10.1007/978-1-60761-987-1_12 for more information
+#' about .imzml format and doi:10.1093/bioinformatics/btv146 for more details
+#' regarding the Cardinal R package. Note that for .imzml files exported from
+#' commercial software, an additional .ibd file may accompany each .imzml,
+#' which should both be located in the same folder.
 #'
-#' @param dp data folder location, relative to R project directory
-#' @param pol ionization mode, either 'pos' or 'neg'. The ionization mode must be present in the corresponding file names.
-#' @param mz.low lower limit of mass range in units of m/z
-#' @param mz.high upper limit of mass range in units of m/z
-#' @param res mass resolution, in ppm
-#' @return A list containing .imzML input parameters and file names.
+#' @param dp Data path relative to the "data/" folder. Data files
+#' should be separated by subfolders according to ionization mode.
+#' @param pol Ionization mode (either "pos" or "neg").
+#' @param mz_range A vector specifying the limits of the m/z range.
+#' @param mz_res Mass resolution, in ppm.
+#' @return A data frame containing .imzML input parameters and file names.
 #' @examples
-#' MSI.InputParams("data/","neg",300,900,5)
+#'
+#' # lp1 <- msi_input_param(
+#' #   dp = "pos/",
+#' #   pol = "pos",
+#' #   mz_range = c(300, 1300),
+#' #   mz_res = 5
+#' # )
 #'
 #' @export
-MSI.InputParams <- function(
-    dp,
-    pol,
-    mz.low,
-    mz.high,
-    res){
-
-  data.frame(
-    # data folder location (relative to R project directory)
-    "path.d" = dp,
-    # ionization mode (i.e. 'pos' or 'neg')
-    ## Must be present in filename and both an .ibd and .imzML file from SCiLS
-    ## Export must be located in same folder
+msi_input_param <- function(
+  dp,
+  pol,
+  mz_range,
+  mz_res
+) {
+  d <- data.frame(
+    "path.d" = paste("data/", dp, sep = ""),
     "polarity" = pol,
-    # mass range in units of m/z
-    "mz.range.low" = mz.low,
-    "mz.range.high" = mz.high,
-    # resolution (in ppm)
-    "resolution" = res
+    "mz.range.low" = mz_range[[1]],
+    "mz.range.high" = mz_range[[2]],
+    "resolution" = mz_res
   )
-
+  return(d)
 }
 
-#' Load MSI Datasets in .imzML Format
+#' Load .imzml Datasets
 #'
-#' Uses input parameters from MSI.InputParams() to read files into R using the Cardinal function readMSIData().
+#' Uses specified input parameters to read files into R using Cardinal.
 #'
-#' @param list.p list containing input parameters and file names created from MSI.InputParams()
-#' @return A list of Cardinal MSImagingExperiment objects created for each file included in the specified data folder.
+#' @param lp List containing input parameters from msi_input_param().
+#' @return A list of Cardinal MSImagingExperiment objects.
 #' @examples
-#' MSI.LoadAll(list.p)
+#'
+#' # d <- msi_load_data(lp1)
 #'
 #' @export
-MSI.LoadAll <- function(list.p){
-
+msi_load_data <- function(lp) {
   # List samples for processing
-  list.s <- data.frame(
-    "ID" = seq(
-      1:length(
+  list_s <- data.frame(
+    "ID" = seq.int(
+      1,
+      length(
         list.files(
-          path = list.p$path.d
+          path = lp$path.d
         )[grepl(
-          list.p$polarity,
+          ".imzML",
           list.files(
-            path = list.p$path.d
+            path = lp$path.d
           )
-        ) &
-          grepl(
-            ".imzML",
-            list.files(
-              path = list.p$path.d
-            )
-          )
-        ])
+        )]
+      ),
+      1
     ),
     "Sample.imzML" = list.files(
-      path = list.p$path.d
+      path = lp$path.d
     )[grepl(
-      list.p$polarity,
+      ".imzML",
       list.files(
-        path = list.p$path.d
+        path = lp$path.d
       )
-    ) &
-      grepl(
-        ".imzML",
-        list.files(
-          path = list.p$path.d
-        )
-      )
-    ],
+    )],
     "Sample.ibd" = list.files(
-      path = list.p$path.d
+      path = lp$path.d
     )[grepl(
-      list.p$polarity,
+      ".ibd",
       list.files(
-        path = list.p$path.d
+        path = lp$path.d
       )
-    ) &
-      grepl(
-        ".ibd",
-        list.files(
-          path = list.p$path.d
-        )
-      )
-    ]
+    )]
   )
 
-
   ## Import data
-  list.d <- setNames(
+  list_d <- setNames(
     lapply(
-      list.s[["ID"]],
-      function(x)
-      {
-
+      list_s[["ID"]],
+      function(x) {
         d <- Cardinal::readMSIData(
           # data file name
           paste(
-            list.p$path.d,
-            list.s[x,"Sample.imzML"],
+            lp$path.d,
+            list_s[x, "Sample.imzML"],
             sep = ""
           ),
           # load dataset as sparse matrix
-          memory = F,
+          memory = FALSE,
           # mass range
           mass.range = c(
-            list.p$mz.range.low,
-            list.p$mz.range.high
+            lp$mz.range.low,
+            lp$mz.range.high
           ),
           # resolution
-          resolution = list.p$resolution,
+          resolution = lp$resolution,
           units = "ppm"
         )
-
-        if(class(d) == "MSImagingExperiment") {
-
-          Cardinal::centroided(d) <- F
-
+        if(class(d) == "MSImagingExperiment") { # nolint
+          Cardinal::centroided(d) <- FALSE
         }
-
-        if(class(d) == "MSProcessedImagingExperiment") {
-
-          Cardinal::centroided(d) <- F
-
+        if(class(d) == "MSProcessedImagingExperiment") { # nolint
+          Cardinal::centroided(d) <- FALSE
         }
-
         return(d)
-
       }
     ),
     c(
-      list.s[["Sample.imzML"]]
+      list_s[["Sample.imzML"]]
     )
   )
-
-  list.d <- list.d[lengths(list.d) > 0]
-
-  list.d <- setNames(
+  list_d <- list_d[lengths(list_d) > 0]
+  list_d <- setNames(
     lapply(
-      seq(1:length(list.d)),
+      seq.int(1, length(list_d), 1),
       function(x) {
-        Cardinal::run(list.d[[x]]) <- list.s[x,"ID"]
-
-        return(list.d[[x]])
+        Cardinal::run(list_d[[x]]) <- list_s[x, "ID"]
+        return(list_d[[x]])
       }
     ),
     c(
-      list.s[["Sample.imzML"]]
+      list_s[["Sample.imzML"]]
     )
   )
-
   return(
     list(
-      "Sample.Info" = list.s,
-      "Data.files" = list.d
-      )
+      "Sample.Info" = list_s,
+      "Data.files" = list_d
     )
-
-  }
-
-
-
+  )
+}

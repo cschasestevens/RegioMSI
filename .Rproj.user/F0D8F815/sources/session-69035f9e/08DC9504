@@ -1,0 +1,26 @@
+{
+    "id": "08DC9504",
+    "path": "~/Dev/RegioMSI.testoutputs/test.package.R",
+    "project_path": null,
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1719852818476.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "44,0",
+        "scrollLine": "12"
+    },
+    "folds": "75|22|147|0|\n148|26|199|0|\n200|19|254|0|\n255|31|474|0|\n475|22|511|0|\n513|37|568|0|\n569|65|781|0|\n782|30|883|0|\n884|27|920|0|\n921|27|1030|0|\n1031|39|1139|0|\n1140|36|1351|0|\n",
+    "lastKnownWriteTime": 1719960553,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1719960553169,
+    "read_only": false,
+    "read_only_alternatives": []
+}

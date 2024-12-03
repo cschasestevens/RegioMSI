@@ -1,0 +1,662 @@
+#' Cluster Pixel Counts
+#'
+#' Counts the number of pixels in each cluster for each sample.
+#'
+#' @param df Normalized data matrix containing cluster, sample ID, pixel coordinate, and pixel intensity information.
+#' @param md Number of metadata columns present in input data.
+#' @param g.var1 Numeric sample ID column name.
+#' @param g.var2 Numeric cluster ID column name.
+#' @return A data frame containing the number of pixels per cluster for each sample.
+#' @examples
+#' # Count pixel number per cluster for each sample
+#' d.pix <- MSI.stat.pixel(
+#'   # input data
+#'   d,
+#'   # metadata column number
+#'   8,
+#'   # sample number column
+#'   "ID",
+#'   # cluster number column
+#'   "Cluster"
+#' )
+#'
+#' @export
+MSI.stat.pixel <- function(df,md,g.var1,g.var2) {
+
+  d <- df
+
+  d.c <- setNames(
+    dplyr::left_join(
+      dplyr::count(
+        d,
+        .data[[g.var1]],
+        .data[[g.var2]]
+      ),
+      dplyr::count(
+        d[!is.na(
+          d[,
+            (md +
+               1
+            )]
+        ),],
+        .data[[g.var1]],
+        .data[[g.var2]]
+      ),
+      by = c(g.var1,g.var2)
+    ),
+    c(
+      g.var1,
+      g.var2,
+      "total",
+      "ex.na"
+    )
+  )
+
+  return(d.c)
+
+}
+
+
+#' Group-wise Fold Change Function
+#'
+#' Calculates the log2 fold changes for all possible combinations of study treatment groups.
+#'
+#' @param df Normalized data matrix containing cluster, sample ID, pixel coordinate, and pixel intensity information.
+#' @param md Number of metadata columns present in input data.
+#' @param grp Treatment group column name.
+#' @return A data frame containing the group-wise fold changes for each compound.
+#' @examples
+#' # Calculate group-wise fold changes
+#' l.fold <- setNames(
+#'   lapply(
+#'     seq.int(
+#'       1,
+#'       length(
+#'         unique(
+#'           d[["ID"]]
+#'         )
+#'       ),
+#'       1
+#'     ),
+#'     function(f)
+#'       MSI.stat.FC(
+#'         # input data
+#'         d[d[["ID"]] == f,],
+#'         # metadata column number
+#'         8,
+#'         # cluster number column
+#'         "Cluster"
+#'       )
+#'   ),
+#'   c(
+#'     unique(
+#'       d[["ID"]]
+#'     )
+#'   )
+#' )
+#'
+#' @export
+MSI.stat.FC <- function(df,md,grp) {
+  d1 <- df[!is.na(df[,md + 1]),]
+  if(class(d1[[grp]]) == "factor") {
+    d1[[grp]] <- factor(
+      as.numeric(
+        d1[[grp]]
+      ),
+      levels = c(
+        seq.int(
+          1,
+          length(
+            unique(
+              as.numeric(
+                d1[[grp]]
+              )
+            )
+          )
+        )
+      )
+    )
+  }
+  if(class(d1[grp]) == "integer") {
+    d1[[grp]] <- factor(
+      as.numeric(
+        d1[[grp]]
+      ),
+      levels = c(
+        seq.int(
+          1,
+          length(
+            unique(
+              as.numeric(
+                d1[[grp]]
+              )
+            )
+          )
+        )
+      )
+    )
+  }
+  if(class(d1[[grp]]) == "character") {
+    d1[[grp]] <- as.factor(
+        d1[[grp]]
+        )
+      }
+
+  # Group Combinations
+  fold.comb <- as.data.frame(
+    combn(
+      levels(
+          d1[[grp]]
+          ),
+      2
+    )
+  )
+
+  # Metabolite Group Means (excluding missing samples)
+  fold.mean <- aggregate(
+    d1[,(md + 1):ncol(d1)],
+    by = list(
+      d1[[grp]]
+    ),
+    function(x) mean(x)
+  )
+
+  # Group Fold Changes
+  fun.comb <- function(x,y) {x / y}
+
+  fold.all <- lapply(fold.comb,
+                     function(x) {
+
+                       fun.comb(fold.mean[fold.mean[[1]] == x[[1]],2:ncol(fold.mean)],
+                                fold.mean[fold.mean[[1]] == x[[2]],2:ncol(fold.mean)])
+
+                     })
+
+  # Return Combined List
+  fold.all <- data.table::rbindlist(fold.all)
+
+  fold.all[["Comparison"]] <- paste(fold.comb[1,],
+                                    fold.comb[2,],
+                                    sep = "-")
+
+  fold.all <- dplyr::select(fold.all,.data[["Comparison"]],
+                            everything())
+
+  fold.all[,2:ncol(fold.all)] <- lapply(
+    fold.all[,2:ncol(fold.all)],
+    function(x)
+      log2(x)
+  )
+
+  return(fold.all)
+
+}
+
+
+#' One-way ANOVA of MSI Data
+#'
+#' Conducts a one-way ANOVA with Tukey's post-hoc analysis for each compound.
+#'
+#' @param d Normalized data matrix containing cluster, sample ID, pixel coordinate, and pixel intensity information.
+#' @param md Number of metadata columns present in input data.
+#' @param g Treatment group column name.
+#' @return A data frame containing one-way ANOVA results for each compound.
+#' @examples
+#' # Calculate one-way ANOVA
+#' l.p <- setNames(
+#'   lapply(
+#'     seq.int(
+#'       1,
+#'       length(
+#'         unique(
+#'           d[["ID"]]
+#'         )
+#'       ),
+#'       1
+#'     ),
+#'     function(f)
+#'       MSI.stat.owANOVA(
+#'         # input data
+#'         d[d[["ID"]] == f,],
+#'         # metadata column number
+#'         8,
+#'         # cluster number column
+#'         "Cluster"
+#'       )
+#'   ),
+#'   c(
+#'     unique(
+#'       d[["ID"]]
+#'     )
+#'   )
+#' )
+#'
+#' @export
+MSI.stat.owANOVA <- function(
+    d,md,g
+) {
+  # Input data
+  d.in <- d
+
+  d.in[[g]] <- as.factor(
+    d.in[[g]]
+  )
+
+  m.name <- names(
+    d.in[,-c(1:md)]
+  )
+
+  # Run OW-ANOVA with Tukey's post-hoc analysis
+  d.ow <- lapply(
+    d.in[(md + 1):ncol(d.in)],
+    function(x)
+      TukeyHSD(
+        aov(
+          x ~ d.in[[g]]
+        ),
+        conf.level = 0.95
+      )
+  )
+
+  # extract post-hoc result
+  d.ow.post <- setNames(
+    as.data.frame(
+      lapply(
+        lapply(
+          d.ow,
+          function(x)
+            lapply(
+              x,
+              '[',
+              lazyeval::missing_arg(),
+              "p adj"
+            )
+        ),
+        "["
+      )
+    ),
+    c(m.name)
+  )
+
+  # FDR correction
+  d.ow.fdr <- setNames(
+    as.data.frame(
+      apply(
+        d.ow.post,
+        1,
+        function(x)
+          as.data.frame(
+            p.adjust(
+              x,
+              method= "fdr"
+            )
+          )
+      )
+    ),
+    c(
+      row.names(
+        d.ow.post
+      )
+    )
+  )
+
+  # Return list of raw and FDR-adjusted p-values
+  return(
+    list(
+      "Raw P" = data.frame(
+        "Name" = row.names(t(d.ow.post)),
+        t(d.ow.post)
+      ),
+      "FDR P" = data.frame(
+        "Name" = row.names(d.ow.fdr),
+        d.ow.fdr),
+      "Sig Raw" = data.frame(
+        "Significant" = colSums(as.data.frame(t(d.ow.post)) < 0.05)),
+      "Sig FDR" = data.frame(
+        "Significant" = colSums(d.ow.fdr < 0.05)
+      )
+    )
+  )
+
+}
+
+
+#' Merge Function for one-way ANOVA and Fold Change Results
+#'
+#' Combines one-way ANOVA and fold change results for selecting regional comparisons and visualizing results.
+#'
+#' @param pval.df One-way ANOVA results data frame.
+#' @param fold.df Group-wise fold change data frame.
+#' @param g.var Treatment group column name.
+#' @return A merged data frame containing one-way ANOVA and fold change results for each compound.
+#' @examples
+#' # Combine results and select region comparisons for visualization
+#' l.comb <- setNames(
+#'   lapply(
+#'     seq.int(
+#'       1,
+#'       length(
+#'         unique(
+#'           d[["ID"]]
+#'         )
+#'       ),
+#'       1
+#'     ),
+#'     function(f)
+#'       MSI.stat.output(
+#'         # Statistics results df
+#'         l.p[[f]][["FDR P"]][-1],
+#'         # Fold change df
+#'         l.fold[[f]],
+#'         # Grouping variable
+#'         "Comparison"
+#'       )
+#'   ),
+#'   c(
+#'     unique(
+#'       d[["ID"]]
+#'     )
+#'   )
+#' )
+#'
+#' @export
+MSI.stat.output <- function(
+    pval.df,
+    fold.df,
+    g.var
+    ) {
+
+  ## All input data
+
+  d.cr <- data.frame(
+    "Index" = seq(
+      1:length(
+        names(fold.df[,2:ncol(fold.df)])
+      )
+    ),
+    "Name" = names(fold.df[,2:ncol(fold.df)]),
+    setNames(
+      pval.df,
+      c(
+        paste(
+          names(
+            pval.df
+          ),
+          ".p",
+          sep = ""
+        )
+      )
+    ),
+    setNames(
+      as.data.frame(
+        t(
+          fold.df[,-1]
+        )
+      ),
+      c(
+        paste(
+          fold.df[[g.var]],
+          ".fc",
+          sep = ""
+        )
+      )
+    )
+  )
+
+  return(d.cr)
+
+}
+
+#' Student's T-test of MSI Data
+#'
+#' Conducts a Student's T-test for each compound.
+#'
+#' @param df Normalized data matrix containing cluster, sample ID, pixel coordinate, and pixel intensity information.
+#' @param md Number of metadata columns present in input data.
+#' @param var.g Treatment group column name.
+#' @param g1 Treatment group 1 name.
+#' @param g2 Treatment group 2 name.
+#' @param l.names Vector of compound names equal to the number of compounds present in the given data matrix.
+#' @return A data frame containing T-test results for each compound.
+#' @examples
+#' ## calculate sample means and conduct hypothesis test
+#' d.p2 <- dplyr::left_join(
+#'   data.frame(
+#'     unique(
+#'       d2[,c("ID","Group")]
+#'     )
+#'   ),
+#'   setNames(
+#'     purrr::reduce(
+#'       lapply(
+#'         seq.int(
+#'           (8 + 1),
+#'           ncol(d2),
+#'           1
+#'         ),
+#'         function(x)
+#'           aggregate(
+#'             d2[,
+#'                names(d2[x])
+#'             ],
+#'             list(
+#'               d2[["ID"]]
+#'             ),
+#'             function(y)
+#'               (mean(y)))),
+#'       dplyr::left_join,
+#'       by = "Group.1"
+#'     ),
+#'     c(
+#'       "ID",
+#'       names(d2[,(8 + 1):ncol(d2)])
+#'     )
+#'   ),
+#'   by = "ID"
+#' )
+#'
+#' d.p2 <- data.frame(
+#'   d.p2[,1:2],
+#'   as.data.frame(
+#'     lapply(
+#'       d.p2[,3:ncol(d.p2)],
+#'       function(x)
+#'         log2(x)
+#'     )
+#'   )
+#' )
+#'
+#' d.p2.result <- cbind(
+#'   data.frame(
+#'     "Comparison" = c("M.HO3-M.SFA","F.HO3-F.SFA")
+#'   ),
+#'   rbind(
+#'     setNames(
+#'       as.data.frame(
+#'         lapply(
+#'           names(
+#'             d.p2[,3:ncol(d.p2)]
+#'           ),
+#'           function(x)
+#'             MSI.stat.t(d.p2,2,"Group","M.HO3","M.SFA",x))),
+#'       c(names(d[,9:ncol(d)]))),
+#'     setNames(
+#'       as.data.frame(
+#'         lapply(
+#'           names(
+#'             d.p2[,3:ncol(d.p2)]
+#'           ),
+#'           function(x)
+#'             MSI.stat.t(d.p2,2,"Group","F.HO3","F.SFA",x))),
+#'       c(names(d[,9:ncol(d)])))
+#'   )
+#' )
+#'
+#' @export
+MSI.stat.t <- function(
+    df,md,var.g,
+    g1,g2,
+    l.names
+) {
+  setNames(
+    as.data.frame(
+      lapply(
+        names(
+          df[
+            ,
+            (md + 1):ncol(df)
+          ]
+        ),
+        function(x)
+          t.test(
+            df[
+              df[[var.g]] == g1 |
+                df[[var.g]] == g2,
+              x
+            ] ~
+              df[df[[var.g]] == g1 |
+                   df[[var.g]] == g2,
+                 var.g
+              ]
+          )[["p.value"]]
+      )
+    ),
+    c(l.names)
+  )
+}
+
+
+
+
+
+
+
+cr.in <- MSI.ChemRICH.input(
+  # p-value input df
+  d.p2.result,
+  # fold change input df
+  d.fold,
+  # feature metadata
+  md.feat,
+  # grouping column for calculating ChemRICH
+  "label.saturation"
+)
+
+#' Merge Function for ChemRICH Analysis
+#'
+#' Combines one-way ANOVA and fold change results for enrichment analysis based on user-defined compound classes.
+#' This enrichment analysis method is adapted from Chemical Similarity Enrichment Analysis (ChemRICH), initially described
+#' in Barupal et. al. 2017 (DOI: 10.1038/s41598-017-15231-w).
+#'
+#' @param pval.df One-way ANOVA results data frame.
+#' @param fold.df Group-wise fold change data frame.
+#' @param feat.df Data frame containing feature metadata.
+#' @param g.var Treatment group column name.
+#' @return A merged data frame formatted for enrichment analysis based on user-defined compound classes.
+#' @examples
+#' cr.in <- MSI.ChemRICH.input(
+#' # p-value input df
+#' d.p2.result,
+#' # fold change input df
+#' d.fold,
+#' # feature metadata
+#' md.feat,
+#' # grouping column for calculating ChemRICH
+#' "label.saturation"
+#' )
+#'
+#' @export
+MSI.ChemRICH.input <- function(
+  pval.df,
+  fold.df,
+  feat.df,
+  g.var
+  ) {
+  ## Join p.value and fold dfs with feature list and class information
+  d.cr <- data.frame(
+    "Index" = seq(
+      1:length(
+        names(fold.df[,2:ncol(fold.df)])
+      )
+    ),
+    "Name" = names(fold.df[,2:ncol(fold.df)]),
+    "Class" = as.factor(feat.df[[g.var]]),
+    setNames(
+      magrittr::set_rownames(
+        as.data.frame(
+          lapply(
+            as.data.frame(
+              t(
+                pval.df
+                )[-1,]
+              ),
+            function(x)
+              round(
+                as.numeric(x),
+                digits = 4
+                )
+            )
+          ),
+        c(
+          names(
+            pval.df[,2:ncol(pval.df)]
+            )
+          )
+        ),
+      c(
+        paste(
+          pval.df[[1]],
+          ".p",
+          sep = ""
+        )
+      )
+    ),
+    setNames(
+      magrittr::set_rownames(
+        as.data.frame(
+          lapply(
+            as.data.frame(
+              t(
+                fold.df
+              )[-1,]
+            ),
+            function(x)
+              round(
+                as.numeric(x),
+                digits = 4
+              )
+          )
+        ),
+        c(
+          names(
+            fold.df[,2:ncol(fold.df)]
+          )
+        )
+      ),
+      c(
+        paste(
+          fold.df[[1]],
+          ".fc",
+          sep = ""
+        )
+      )
+    )
+  )
+
+  return(d.cr)
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

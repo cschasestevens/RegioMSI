@@ -1,7 +1,7 @@
 Package: RegioMSI
-Date: 2024-07-02
+Date: 2024-12-03
 Type: Package
-Title: Parallel Processing, Normalization, and Analysis of Mass Spectrometry Imaging Datasets
+Title: Processing, Normalization, and Analysis of Mass Spectrometry Imaging Datasets
 Version: 1.1
 Author: Nathanial C. Stevens
 Maintainer: Nathanial C. Stevens <cschasestevens@gmail.com>
@@ -29,3 +29,7 @@ Imports:
   magrittr,
   ggnewscale,
   EnhancedVolcano
+Suggests: 
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr

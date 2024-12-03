@@ -1,0 +1,1616 @@
+---
+title: "MSI.Analysis"
+output: 
+  html_document: 
+    toc: yes
+    toc_float: TRUE
+    toc_depth: 2
+    theme: cerulean
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+---
+
+```{r setup, include=FALSE}
+# Markdown default settings for embedded figures
+
+knitr::opts_chunk$set(echo = F, warning = F,
+                      message = F,
+                      dpi = 1000,
+                      fig.width = 7)
+
+```
+
+# RegioMSI v.1.1: Parallel processing and analysis of mass spectrometry imaging (MSI) omics-based datasets
+
+### **Important:**
+#### - Set **"eval ="** to **"F"** to skip execution of code chunk.
+#### - Recommended specs: Windows >10 with 128Gb of RAM OR Linux Ubuntu >22.04 with 128Gb of RAM
+
+## 1.1. Import libraries and plot themes
+#### Includes packages for import, processing, segmentation, normalization, and statistical analysis of MSI files in .imzML format.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+
+source(
+  "scripts/1.1.lib.R",
+  local = knitr::knit_global()
+  )
+  
+```
+
+
+
+
+
+## 2.1. Import data
+#### Loads all .imzML files from specified folder; The folder location is relative to the path of this .Rmd file. Can specify the polarity, acquisition mass range, and the resolution of the data. These parameters are included when importing raw MSI data into SCiLS software. It is generally most efficient to complete preprocessing steps in SCiLS and export all preprocessed data as .imzML, including all features prior to normalization or centroid calculation. 
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+# Specify input parameters
+
+list.p <- data.frame(
+  # data folder location (relative to R project directory)
+  "path.d" = "data/",
+  # ionization mode (i.e. 'pos' or 'neg')
+  ## Must be present in filename and both an .ibd and .imzML file from SCiLS
+  ## Export must be located in same folder
+  "polarity" = "pos",
+  # mass range in units of m/z
+  "mz.range.low" = 300,
+  "mz.range.high" = 1300,
+  # resolution (in ppm)
+  "resolution" = 5
+)
+
+
+```
+
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+# Import data files
+source(
+  "scripts/2.1.data.import.R",
+  local = knitr::knit_global()
+  )
+
+
+```
+
+
+
+
+
+## 2.2. Image data processing
+#### Performs peak detection, alignment, binning, peak annotation, and assignment for all study samples. Detection and alignment are performed simultaneously to produce a single peak list for the entire dataset. Peaks from each sample are binned to this reference list to convert data from profile to centroid and are used for downstream analyses. Peak annotations are supplied manually and correspond to compounds validated by LC-MS/MS.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+
+#---- Peak Detection ----
+# Perform peak alignment and filtering for all samples
+## Output: detected peaks for each sample aligned by m/z (5ppm mass error)
+## IMPORTANT: Will run in parallel if executed in Linux; will run sequentially if run in Windows
+source(
+  "scripts/2.2a.process.peaks.detection.R",
+  local = knitr::knit_global()
+  )
+
+
+#---- Peak Binning ----
+# If not running steps sequentially, load RDS containing combined peak list (manually change file name)
+if(
+  !exists(
+    "d.peaks"
+    ) &
+  file.exists("processing/2.2.process.peaks.neg.rds")
+  ) {
+  d.peaks <- readRDS(
+    "processing/2.2.process.peaks.neg.rds"
+    )
+  }
+
+# Bin profile spectra to peak list and output centroid spectra
+source(
+  "scripts/2.2b.process.peaks.binning.R",
+  local = knitr::knit_global()
+  )
+
+
+#---- Peak annotation ----
+
+# Requires:
+# - d.peaks object from peak detection step
+# - annotation text file for assigning LC-MS/MS validated annotations to detected peaks
+
+# Load annotation file (see example list for formatting help)
+list.anno <- read.table(
+  "processing/ozma.annotations.neg.txt",
+  sep = "\t",
+  header = T
+  )
+
+# Source script
+source(
+  "scripts/2.2c.process.peaks.annotation.R",
+  local = knitr::knit_global()
+  )
+
+
+#---- Assign annotations to each binned sample and combine ----
+
+## Return batch list for combining (add or remove lines as necessary depending on number of batches)
+list.d.anno <- list(
+  "batch1" = fun.data.filter("processing/2.2.processed.neg.b1.rds"),
+  "batch2" = fun.data.filter("processing/2.2.processed.neg.b2.rds"),
+  "batch3" = fun.data.filter("processing/2.2.processed.neg.b3.rds"),
+  "batch4" = fun.data.filter("processing/2.2.processed.neg.b4.rds")
+  )
+
+## Combine and save processed data
+### Combine
+d.processed <- do.call(
+  cbind,
+  list.d.anno
+  )
+
+### Verify that all samples have been correctly combined
+imageData(d.processed)
+features(d.processed)
+pixelData(d.processed)
+run(d.processed)
+spectra(
+  d.processed,
+  "intensity"
+  )[,1:25]
+
+### Save data
+saveRDS(
+  d.processed,
+  "analysis/data.processed.neg.rds"
+  )
+
+### Save annotation lists
+write.table(
+  list.f.anno,
+  "analysis/data.annotated.neg.txt",
+  col.names = T,
+  row.names = F,
+  sep = "\t"
+  )
+write.table(
+  list.f.unk,
+  "analysis/data.unknown.neg.txt",
+  col.names = T,
+    row.names = F,
+  sep = "\t"
+  )
+
+d <- d.processed
+remove(list.d.anno,list.f.unk,d.processed)
+gc(reset = T)
+
+```
+
+
+
+
+
+## 2.3a-b. Image normalization
+#### Converts MSI experiment objects produced by Cardinal R to dense matrices after annotating peaks. This increases memory consumption but enables greater compatibility and faster calculation of normalization methods from other R packages. Two different normalization methods are tested in this script and compared to pre-normalized data, traditional total ion current (TIC) normalization and sparse locally estimated scatterplot smoothing (sLOESS) normalization. sLOESS is adapted from LOESS normalization in untargeted LC-MS/MS-based metabolomics assays and performs LOESS normalization for every non-zero intensity pixel in each image across multiple sample runs. This method addresses intra- and intersample signal drift in MSI experiments whereas TIC normalization in MSI is traditionally implemented on a per-sample basis and does not directly account for systematic variation in signal intensity.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+#---- Convert imaging data into dense matrix ----
+
+# If not running steps sequentially, load RDS containing processed samples
+if(
+  !exists(
+    "d.peaks"
+    ) &
+  file.exists("processing/2.2.process.peaks.rds")
+  ) {
+  d.peaks <- readRDS(
+    "processing/2.2.process.peaks.rds"
+    )
+  }
+
+# Load processed data, annotation list, and sample metadata table
+## Sample metadata is created outside of R (see example for details)
+
+## Processed data
+if(
+  !exists("d") &
+  file.exists("analysis/data.processed.neg.rds")
+  )
+  {
+  
+  d <- readRDS(
+    "analysis/data.processed.neg.rds"
+    )
+  
+  }
+imageData(d)
+
+## Annotation list
+d.anno <- read.table(
+    "analysis/data.annotated.neg.curated.txt",
+    header = T,
+    sep = "\t"
+    )
+
+## pixel metadata
+d.group <- read.table(
+  "processing/sample.metadata.neg.txt",
+  sep = "\t",
+  header = T
+  )
+
+
+# Source script
+source(
+  "scripts/2.3a.normalize.format.R",
+  local = knitr::knit_global()
+  )
+
+
+## Save objects for downstream analysis
+### feature metadata
+write.table(
+  md.feat,
+  "analysis/data.neg.feature.metadata.txt",
+  col.names = T,
+  row.names = F,
+  sep = "\t"
+  )
+### pixel metadata
+write.table(
+  md.samp,
+  "analysis/data.neg.pixel.metadata.txt",
+  col.names = T,
+    row.names = F,
+  sep = "\t"
+  )
+### data matrix
+saveRDS(
+  d.mat,
+  "analysis/data.neg.matrix.rds"
+  )
+
+
+#---- Intra/Intersample normalization by sparse LOESS ----
+
+# Load objects if not analyzing sequentially
+if(!exists("d.mat")) {
+  d.mat <- readRDS(
+    "analysis/data.pos.matrix.rds"
+    )
+  }
+if(!exists("md.feat")) {
+  md.feat <- read.table(
+    "analysis/data.pos.feature.metadata.txt",
+    sep = "\t",
+    header = T
+    )
+  }
+if(!exists("md.samp")) {
+  md.samp <- read.table(
+    "analysis/data.pos.pixel.metadata.txt",
+    sep = "\t",
+    header = T
+    )
+  }
+
+
+## Source script
+source(
+  "scripts/2.3b.normalize.sLOESS.R",
+  local = knitr::knit_global()
+  )
+
+## No normalization
+df.none <- fun.no.normalize(d.mat)
+
+## TIC normalized data
+df.tic <- fun.TIC.normalize(d.mat)
+
+## sLOESS normalized data
+df.sloess <- fun.sLOESS.normalize(d.mat)
+saveRDS(
+  df.sloess,
+  file = "analysis/data.neg.sloess.rds"
+  )
+df.sloess <- readRDS(
+  "analysis/data.pos.sloess.rds"
+  )
+
+#---- Compare TIC of Raw vs. TIC vs. sLOESS norm ----
+
+## Append Raw/TIC/sLOESS counts to sample metadata
+md.samp <- data.frame(
+  md.samp,
+  "mTIC.pixel.raw" = df.tic[["pixel.mTIC"]],
+  "mTIC.pixel.TIC" = df.tic[["mTIC.norm"]],
+  "mTIC.pixel.sLOESS" = apply(
+      df.sloess[
+        ,
+        4:ncol(df.sloess)
+        ],
+      1,
+      function(x) 
+        sum(x)
+      )
+  )
+
+## Save plot
+ggsave(
+  "analysis/plot.neg.norm.TIC.png",
+  ggarrange(
+    ## Raw
+    fun.p.tic(
+      ## sample metadata
+      md.samp,
+      ## pixel column
+      "pixel",
+      ## TIC for selected norm
+      "mTIC.pixel.raw",
+      ## Sample ID column
+      "ID"
+      ),
+    fun.p.tic(
+      md.samp,
+      "pixel",
+      "mTIC.pixel.TIC",
+      "ID"
+      ),
+    fun.p.tic(
+      md.samp,
+      "pixel",
+      "mTIC.pixel.sLOESS",
+      "ID"
+      ),
+    ncol = 3,
+    common.legend = T,
+    labels = c("Raw","TIC","sLOESS")
+    ),
+  width = 18,
+  height = 6,
+  dpi = 600
+  )
+
+
+## median group RSDs
+g.rsd <- list(
+  "Raw" = fun.c.rsd(
+    # input df
+    df.none,
+    # metadata col. number
+    3,
+    "Group",
+    # feature metadata df
+    md.feat,
+    # annotation col. name
+    "Name"
+    ),
+  "TIC" = fun.c.rsd(
+    df.tic,
+    5,
+    "Group",
+    md.feat,
+    "Name"
+    ),
+  "sLOESS" = fun.c.rsd(
+    df.sloess,
+    3,
+    "Group",
+    md.feat,
+    "Name"
+    )
+  )
+
+## Save plot
+ggsave(
+  "analysis/plot.neg.norm.RSD.png",
+  ggarrange(
+    ## Raw
+    fun.p.rsd(
+      ## rsd df
+      g.rsd[["Raw"]][["all.group.rsd"]],
+      ## X-variable
+      "ID",
+      ## rsd value
+      "value",
+      ## rsd group variable
+      "Group.RSD"
+      ),
+    fun.p.rsd(
+      ## rsd df
+      g.rsd[["TIC"]][["all.group.rsd"]],
+      ## X-variable
+      "ID",
+      ## rsd value
+      "value",
+      ## rsd group variable
+      "Group.RSD"
+      ),
+    fun.p.rsd(
+      ## rsd df
+      g.rsd[["sLOESS"]][["all.group.rsd"]],
+      ## X-variable
+      "ID",
+      ## rsd value
+      "value",
+      ## rsd group variable
+      "Group.RSD"
+      ),
+    ncol = 3,
+    common.legend = T,
+    labels = c(
+      "Raw","TIC","sLOESS"
+      )
+    ),
+  width = 18,
+  height = 6,
+  dpi = 600
+  )
+
+write.table(
+  rbind(
+    g.rsd[["Raw"]][["all.group.rsd"]],
+    g.rsd[["TIC"]][["all.group.rsd"]],
+    g.rsd[["sLOESS"]][["all.group.rsd"]]
+    ),
+  file = "analysis/plot.neg.norm.RSD.txt",
+  sep = "\t",
+  col.names = T,
+  row.names = F
+  )
+
+write.table(
+  rbind(
+    g.rsd[["Raw"]][["median.rsd"]],
+    g.rsd[["TIC"]][["median.rsd"]],
+    g.rsd[["sLOESS"]][["median.rsd"]]
+    ),
+  file = "analysis/plot.neg.norm.RSD.median.txt",
+  sep = "\t",
+  col.names = T,
+  row.names = F
+  )
+
+
+## Plot TIC of each normalization for each sample
+
+ggsave(
+  "analysis/plot.neg.norm.image.sLOESS.png",
+  fun.p.image(
+    # Input df
+    md.samp,
+    # Intensity to plot
+    "mTIC.pixel.sLOESS",
+    # Sample ID variable
+    "ID",
+    # Percentile for scaling contrast of images
+    0.9
+    ),
+  width = 30,
+  height = 12,
+  dpi = 300
+  )
+
+
+## Plot for representative sample
+
+ggsave(
+  "analysis/plot.neg.norm.image.compare.png",
+  ggarrange(
+    fun.p.image2(
+    # Input df
+    md.samp,
+    # Intensity to plot
+    "mTIC.pixel.raw",
+    # Sample ID variable
+    "ID",
+    # Sample number
+    1,
+    # Percentile for scaling contrast of images
+    0.99
+    ),
+    fun.p.image2(
+    # Input df
+    md.samp,
+    # Intensity to plot
+    "mTIC.pixel.TIC",
+    # Sample ID variable
+    "ID",
+    # Sample number
+    1,
+    # Percentile for scaling contrast of images
+    0.99
+    ),
+    fun.p.image2(
+    # Input df
+    md.samp,
+    # Intensity to plot
+    "mTIC.pixel.sLOESS",
+    # Sample ID variable
+    "ID",
+    # Sample number
+    1,
+    # Percentile for scaling contrast of images
+    0.99
+    ),
+    labels = c(
+      "Raw","mTIC","sLOESS"
+      ),
+    nrow = 1,
+    common.legend = T,
+    legend = "bottom"
+    ),
+  width = 24,
+  height = 12,
+  dpi = 600
+  )
+
+
+```
+
+
+
+
+
+# 2.3c-d. Check Normalized Images and Remove Artifacts
+#### Creates ion images of all annotated compounds for each sample. Images are manually curated and technical artifacts are flagged for removal.
+``````{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+# Source script
+source(
+  "scripts/2.3c.normalize.check.images.R",
+  local = knitr::knit_global()
+  )
+
+# Generate ion images for all annotated compounds
+lapply(
+  seq.int(
+    6,
+    (ncol(df.sloess) + 2),
+    1
+    ),
+  function(x)
+  ggsave(
+    paste(
+      "analysis/1.check.norm.images.neg/",
+      names(df.sloess[x - 2]),
+      ".png",
+      sep = ""),
+    fun.p.image3(
+      # Input data
+      df.sloess,
+      # Input metadata
+      md.samp,
+      # Intensity to plot
+      x,
+      # Sample ID variable
+      "ID",
+      # Percentile for scaling contrast of images
+      0.99
+      ),
+    width = 15,
+    height = 6,
+    dpi = 1200
+    )
+  )
+
+d <- df.sloess
+remove(md.feat,md.samp,df.none,df.tic,df.sloess,dl)
+
+#---- Remove artifact images from data (after manual curation) ----
+
+## Load normalized data
+if(!exists("d")) {
+  d <- readRDS(
+    "analysis/data.neg.sLOESS.rds"
+    )
+  }
+
+## Load metadata
+if(!exists("md.feat")) {
+  md.feat <- read.table(
+    "analysis/data.neg.feature.metadata.curated.txt",
+    sep = "\t",
+    header = T
+    )
+  }
+
+if(!exists("md.samp")) {
+  md.samp <- read.table(
+    "analysis/data.neg.pixel.metadata.txt",
+    sep = "\t",
+    header = T
+    )
+  }
+
+
+## Apply artifact filter
+source(
+  "scripts/2.3d.normalize.artifact.remove.R",
+  local = knitr::knit_global()
+  )
+
+
+d2 <- fun.art.filter(
+  # metadata column number
+  7,
+  # pixel metadata column number
+  3
+  )
+
+## Save data
+write.table(
+  d2,
+  file = "analysis/data.neg.analyze.txt",
+  sep = "\t",
+  col.names = T,
+  row.names = F
+  )
+
+saveRDS(
+  d2,
+  "analysis/data.neg.analyze.rds"
+  )
+
+remove(d)
+remove(d2)
+remove(list.anno,list.anno.filt,list.f,list.f.anno)
+
+```
+
+
+
+
+
+# 3.1. Image Segmentation and Clustering
+#### Implements the scRNA-Seq clustering approach used by the R package Seurat to perform segmentation analysis and clustering of MSI data. Briefly, Seurat utilizes a K-nearest neighbor graph to partition all data points into individual 'communities' and evaluates overlapping communities based on their Jaccard similarity scores. This algorithm uses annotated compounds as input and therefore reduces bias introduced by technical artifacts and dramatically reduces the time necessary to generate segmented images. Furthermore, this method reliably partitions regions in tissue types with highly heterogenous morphology (e.g. lung tissue).
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+
+#---- Unsupervised Image Segmentation ----
+
+# Automatically segments regions of interest based on UMAP (Based on single-cell R package Seurat)
+if(!exists("d")) {
+  d <- readRDS(
+    "analysis/data.neg.analyze.rds"
+    )
+}
+
+# Source functions
+source(
+  "scripts/3.1.segment.clusters.markers.R",
+  local = knitr::knit_global()
+  )
+
+# Find clusters for each sample
+d.seg <- setNames(
+  lapply(
+    seq.int(
+      1,
+      length(
+        unique(
+          d[,c("ID")]
+          )
+        ),
+      1
+      ),
+    function(x) 
+      fun.img.segment(
+        # sample number
+        x,
+        # metadata column number
+        8,
+        # loess span parameter (proportion of pixels to fit model to; use lower proportion for tissues with small regions)
+        0.1,
+        # resolution to use for clustering (see Seurat FindClusters() documentation for details; larger number, more clusters)
+        0.9
+        )
+    ),
+  c(
+    unique(
+      d[
+        ,
+        c("ID")
+        ]
+      )
+    )
+  )
+
+
+#---- Find marker compounds for each cluster ----
+
+# Find markers for each cluster in each sample and plot top-5
+d.seg.mark <- setNames(
+  lapply(
+    seq.int(1,length(d.seg),1),
+    function(x){
+      # Find marker compounds for each calculated cluster
+      d.mark <- FindAllMarkers(
+        d.seg[[x]],
+        test.use = "wilcox",
+        densify = T,
+        verbose = T
+        )
+      names(d.mark) <- c(
+        names(
+          d.mark[
+            ,
+            c(1:6)]
+          ),
+        "name"
+        )
+      d.mark[["ID"]] <- names(d.seg[x])
+      
+      # Create top-5 heatmap
+      h.out <- fun.hm.top5.mark(
+        # Seurat object
+        d.seg[[x]],
+        # Marker gene list
+        d.mark,
+        # Cluster column
+        "Cluster",
+        # Heatmap width
+        24,
+        # Heatmap height
+        12,
+        # Column fontsize
+        6,
+        # Row fontsize
+        8,
+        # Sample number
+        x
+        )
+      
+      return(
+        list(
+          "Markers" = d.mark,
+          "Plot" = h.out
+          )
+        )
+      }
+    ),
+  c(names(d.seg))
+  )
+
+# Combine marker lists for all samples
+d.seg.mark.list <- dplyr::bind_rows(
+  lapply(
+    d.seg.mark,
+    "[[",
+    1
+    )
+  )
+
+write.table(
+  d.seg.mark.list,
+  paste(
+    "analysis/2.segmentation/data.neg.cluster.markers.txt",
+    sep = ""
+    ),
+  col.names = T,
+  row.names = F,
+  sep = "\t"
+  )
+  
+
+# Save all plots
+lapply(
+  seq.int(
+    1,
+    length(d.seg.mark),
+    1
+    ),
+  function(x) {
+    
+    png(
+      paste(
+        "analysis/2.segmentation/plot.neg.heat.marker.sample",
+        x,".png",sep = ""
+        ),
+      width = 32,
+      height = 14,
+      units = "cm",
+      res = 1000
+      )
+
+    print(d.seg.mark[[x]][[2]])
+    
+    dev.off()
+    
+    }
+  )
+    
+
+#---- Plot combined cluster images ----
+
+# Add Seurat clustering column to image data frame and overwrite
+d <- dplyr::left_join(
+  dplyr::bind_rows(
+    lapply(
+      seq.int(1,length(d.seg),1),
+      function(x) 
+        data.frame(
+          "pixel" = d[
+            d[["ID"]] == as.numeric(names(d.seg[x])),
+            "pixel"
+            ],
+          "Cluster" = as.factor(as.numeric(
+            d.seg[[x]]@meta.data[["seurat_clusters"]]
+            )
+          ))
+        )
+    ),
+  d,
+  by = "pixel"
+  )
+
+# Plot cluster images for each sample
+d.seg.img <- setNames(
+  lapply(
+    seq.int(
+        1,
+        length(
+          unique(
+            d[,c("ID")]
+            )
+          ),
+        1
+        ),
+    function(x){
+      fun.img.segment.plot(
+        # input data
+        x,
+        # cluster column
+        "Cluster"
+        )
+      }
+    ),
+    c(
+      unique(
+        d[
+          ,
+          c("ID")
+          ]
+        )
+      )
+    )
+
+# Save images
+## All
+ggsave(
+  "analysis/2.segmentation/plot.neg.segmentation.summary.png",
+  ggarrange(
+    plotlist = d.seg.img,
+    ncol = 6,
+    nrow = 2,
+    common.legend = F
+    ),
+  width = 36,
+  height = 16,
+  dpi = 400
+  )
+## Individual
+ggsave(
+  "analysis/2.segmentation/plot.neg.segmentation.sample4.png",
+  d.seg.img[[4]],
+  width = 20,
+  height = 20,
+  dpi = 1000
+  )
+
+# Save objects
+saveRDS(
+  d,
+  "analysis/2.segmentation/data.neg.analyze.segmented.rds"
+  )
+saveRDS(
+  d.seg,
+  "analysis/2.segmentation/data.neg.analyze.segmented.seurat.rds"
+  )
+
+write.table(
+  unique(
+    d[
+      ,
+      c("ID","Cluster")
+      ]
+    ),
+  "processing/sample.clustering.neg.txt",
+  col.names = T,
+  row.names = F,
+  sep = "\t"
+  )
+
+# Remove Seurat objects
+remove(d.seg)
+
+```
+
+
+
+
+
+# 3.2. Region assessment/assignment
+#### Assigns clusters to biologically relevant regions based on traditional histological data and marker compounds for each cluster.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+
+if(!exists("d")) {
+  d <- readRDS(
+    "analysis/2.segmentation/data.neg.analyze.segmented.rds"
+    )
+  }
+
+
+# Assign regions based on H&E images/marker compounds and add region column to data
+#---- Plot individual regions for each image ----
+
+# Split composite cluster images into individual clusters for validation
+d.seg.img.split <- setNames(
+  lapply(
+    seq.int(
+      1,
+      length(unique(d[,c("ID")])),
+      1
+      ),
+    function(x) {
+      setNames(
+        lapply(
+          seq.int(
+            1,
+            length(
+              unique(
+                d[
+                  d[["ID"]] == x,
+                  ]
+                [["Cluster"]]
+                )
+              ),
+            1
+            ),
+          function(y) 
+            fun.img.segment.split(
+              # Input data
+              d,
+              # Sample number
+              x,
+              # Cluster number
+              y
+              )
+          ),
+        c(
+          sort(
+            unique(
+              d[
+                d[["ID"]] == x,
+                ]
+              [["Cluster"]]
+              )
+            )
+          )
+        )
+      }
+    ),
+  c(unique(
+    d[
+      ,
+      c("ID")
+      ]
+    )
+    )
+  )
+
+
+# Save cluster images for each sample
+lapply(
+  seq.int(
+    1,
+    length(d.seg.img.split),
+    1
+    ),
+  function(x)
+    ggsave(
+      paste(
+        "analysis/",
+        "plot.neg.seg.split.sample",
+        x,
+        ".png",
+        sep = ""
+        ),
+      ggarrange(
+        plotlist = d.seg.img.split[[x]],
+        ncol = 6,
+        nrow = ifelse(
+          length(d.seg.img.split[[x]]) <= 6,1,
+          ifelse(
+            length(d.seg.img.split[[x]]) <= 12,2,
+            ifelse(
+              length(d.seg.img.split[[x]]) <= 18,3,
+              4
+              )
+            )
+          ),
+        common.legend = F
+        ),
+      width = 36,
+      height = 16,
+      dpi = 400
+      )
+    )
+
+
+
+```
+
+
+
+
+
+# 3.3. Colocalization to specific region
+#### Plots ion images with cluster overlays to determine compound localization to a specific region.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+# Source function
+source(
+  "scripts/3.3.segment.marker.vis.R",
+  local = knitr::knit_global()
+  )
+
+# Create plots and save (requires input data frame with segmented clusters from previous step)
+p.mark <- fun.img.marker.region(
+  # input data
+  d,
+  # number of metadata columns using for input
+  4,
+  # sample (ID) number
+  4,
+  # list of input data columns to include (by number)
+  c(
+    2:5,49:50,53,55
+    ),
+  # user-defined region name
+  "Alveolar Epithelium",
+  # cluster number of selected region (for selected sample)
+  3
+  )
+
+ggsave(
+  "analysis/3.region.marker.plots/plot.neg.markers.Alvepi.sample4.png",
+  ggarrange(
+    plotlist = p.mark,
+    ncol = 6,
+    nrow = 4,
+    common.legend = F,
+    labels = c(names(p.mark))
+    ),
+  width = 24,
+  height = 18,
+  dpi = 800
+  )
+
+
+```
+
+
+
+
+
+# 4.1. Statistical Analysis (within samples)
+#### Standard statistical methods (fold change, univariate hypothesis testing) for comparing compound intensities between regions in the same sample.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+
+# Source functions
+source(
+  "scripts/4.1a.stats.functions.R",
+  local = knitr::knit_global()
+  )
+
+# Count pixel number per cluster for each sample
+d.pix <- fun.count.pix(
+  # input data
+  d,
+  # metadata column number
+  8,
+  # sample number column
+  "ID",
+  # cluster number column
+  "Cluster"
+  )
+
+
+# Calculate group-wise fold changes
+l.fold <- setNames(
+  lapply(
+    seq.int(
+      1,
+      length(
+        unique(
+          d[["ID"]]
+          )
+        ),
+      1
+      ), 
+    function(f)
+      fun.fold.clus(
+        # input data
+        d[d[["ID"]] == f,],
+        # metadata column number
+        8,
+        # cluster number column
+        "Cluster"
+        )
+      ),
+  c(
+    unique(
+      d[["ID"]]
+      )
+    )
+  )
+
+# Calculate one-way ANOVA
+l.p <- setNames(
+  lapply(
+    seq.int(
+      1,
+      length(
+        unique(
+          d[["ID"]]
+          )
+        ),
+      1
+      ), 
+    function(f)
+      fun.stat.anova(
+        # input data
+        d[d[["ID"]] == f,],
+        # metadata column number
+        8,
+        # cluster number column
+        "Cluster"
+        )
+      ),
+  c(
+    unique(
+      d[["ID"]]
+      )
+    )
+  )
+
+# Combine results and select region comparisons for visualization
+l.comb <- setNames(
+  lapply(
+    seq.int(
+      1,
+      length(
+        unique(
+          d[["ID"]]
+          )
+        ),
+      1
+      ), 
+    function(f)
+      fun.stat.join(
+        # Statistics results df
+        l.p[[f]][["FDR P"]][-1],
+        # Fold change df
+        l.fold[[f]],
+        # Grouping variable
+        "Comparison"
+        )
+      ),
+  c(
+    unique(
+      d[["ID"]]
+      )
+    )
+  )
+
+# Save RDS
+saveRDS(
+  l.comb,
+  "data.neg.stats.intrasample.regions.rds"
+  )
+
+
+remove(l.fold,d.p,fold.comb)
+
+
+```
+
+
+
+
+
+# 4.2. Statistical Analysis (across samples for selected regions)
+#### Standard statistical methods (fold change, univariate hypothesis testing) for comparing compound intensities between regions across samples.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+# Source functions
+source(
+  "scripts/4.1b.stats.volcano.plot.R",
+  local = knitr::knit_global()
+  )
+
+
+#---- Conduct stats between treatments ----
+
+# Between treatments in airway epithelium
+
+## Subset data
+d2 <- d[
+  d[["Cluster"]] == 1 & d[["ID"]] == 1|
+    d[["Cluster"]] == 9 & d[["ID"]] == 2|
+    d[["Cluster"]] == 1 & d[["ID"]] == 3|
+    d[["Cluster"]] == 1 & d[["ID"]] == 4|
+    d[["Cluster"]] == 2 & d[["ID"]] == 5|
+    d[["Cluster"]] == 10 & d[["ID"]] == 6|
+    d[["Cluster"]] == 10 & d[["ID"]] == 7|
+    d[["Cluster"]] == 6 & d[["ID"]] == 8|
+    d[["Cluster"]] == 3 & d[["ID"]] == 9|
+    d[["Cluster"]] == 9 & d[["ID"]] == 10|
+    d[["Cluster"]] == 9 & d[["ID"]] == 11|
+    d[["Cluster"]] == 4 & d[["ID"]] == 12,
+  ]
+
+## calculate group fold changes
+d.fold <- fun.fold.clus(
+  d2,
+  8,
+  "Group"
+  )
+
+## calculate sample means and conduct hypothesis test
+d.p2 <- dplyr::left_join(
+  data.frame(
+    unique(
+      d2[,c("ID","Group")]
+      )
+    ),
+  setNames(
+    purrr::reduce(
+      lapply(
+        seq.int(
+          (8 + 1),
+          ncol(d2),
+          1
+          ),
+        function(x) 
+          aggregate(
+            d2[,
+              names(d2[x])
+              ],
+            list(
+              d2[["ID"]]
+              ),
+            function(y) 
+              (mean(y)))),
+      dplyr::left_join,
+      by = "Group.1"
+      ),
+    c(
+      "ID",
+      names(d2[,(8 + 1):ncol(d2)])
+      )
+    ),
+  by = "ID"
+  )
+
+d.p2 <- data.frame(
+  d.p2[,1:2],
+  as.data.frame(
+    lapply(
+      d.p2[,3:ncol(d.p2)],
+      function(x) 
+        log2(x)
+      )
+    )
+  )
+
+d.p2.result <- cbind(
+  data.frame(
+    "Comparison" = c("M.HO3-M.SFA","F.HO3-F.SFA")
+    ),
+  rbind(
+    setNames(
+      as.data.frame(
+        lapply(
+          names(
+            d.p2[,3:ncol(d.p2)]
+            ),
+          function(x) 
+            fun.stat.t(d.p2,"Group","M.HO3","M.SFA",x))),
+      c(names(d[,9:ncol(d)]))),
+    setNames(
+      as.data.frame(
+        lapply(
+          names(
+            d.p2[,3:ncol(d.p2)]
+            ),
+          function(x) 
+            fun.stat.t(d.p2,"Group","F.HO3","F.SFA",x))),
+      c(names(d[,9:ncol(d)])))
+    )
+  )
+
+
+## Volcano plot
+ggsave(
+  "analysis/4.statistics/plot.pos.stats.vol.FemaleHDMO3vsCtrl.png",
+  fun.vol.s(
+  data.frame(
+    "Name" = names(d.p2.result[,2:ncol(d.p2.result)]),
+    "FC" = t(d.fold[1,2:ncol(d.fold)])[,1],
+    "P" = t(d.p2.result[2,2:ncol(d.p2.result)])[,1]
+    ),
+  "FC","P","Name",4,
+  "Female HDM + O3 vs. Control"
+  ),
+  width = 8,
+  height = 6,
+  dpi = 800
+  )
+
+
+
+#---- Conduct stats between regions ----
+
+## Load region list
+d.region <- read.table(
+  "processing/sample.clustering.neg.txt",
+  header = T,
+  sep = "\t"
+  )
+d.region[["Cluster"]] <- as.factor(d.region[["Cluster"]])
+
+## Add region column to data and subset
+d.region[["ID"]] <- as.factor(d.region[["ID"]])
+d[["ID"]] <- as.factor(d[["ID"]])
+d2 <- dplyr::left_join(
+  d[,c("Cluster","ID","Group")],
+  d.region,
+  by = c("Cluster","ID")
+  )
+d2 <- data.frame(
+  d2,
+  d[,9:ncol(d)]
+  )
+d2 <- d2[
+  d2[["predicted.ID"]] == "airway.epi" | 
+    d2[["predicted.ID"]] == "alveolar.epi",
+  ]
+d2 <- data.frame(
+  "Group2" = paste(
+    d2[["Group"]],
+    d2[["predicted.ID"]],
+    sep = "."
+    ),
+  d2
+  )
+names(d2) <- c(
+  names(d2[,1:6]),
+  names(d[,9:ncol(d)]
+        )
+  )
+
+## calculate group fold changes
+d.fold <- fun.fold.clus(
+  d2,
+  6,
+  "Group2"
+  )
+
+## calculate sample means and conduct hypothesis test
+d.p2 <- dplyr::left_join(
+  data.frame(
+    unique(
+      d2[,c("ID","Group2")]
+      )
+    ),
+  setNames(
+    purrr::reduce(
+      lapply(
+        seq.int(
+          (6 + 1),
+          ncol(d2),
+          1
+          ),
+        function(x) 
+          aggregate(
+            d2[,
+              names(d2[x])
+              ],
+            list(
+              d2[["ID"]],
+              d2[["Group2"]]
+              ),
+            function(y) 
+              (mean(y)))),
+      dplyr::left_join,
+      by = c("Group.1","Group.2")
+      ),
+    c(
+      "ID",
+      "Group2",
+      names(d2[,(6 + 1):ncol(d2)])
+      )
+    ),
+  by = c("ID","Group2")
+  )
+
+d.p2 <- as.data.frame(
+  lapply(
+    d.p2,
+    function(x) 
+      ifelse(
+        x == 0,
+        0.0001,
+        x
+        )
+    )
+  )
+
+d.p2 <- data.frame(
+  d.p2[,1:2],
+  as.data.frame(
+    lapply(
+      d.p2[,3:ncol(d.p2)],
+      function(x) 
+        log2(x)
+      )
+    )
+  )
+
+
+## Conduct t test for chosen comparisons
+d.p2.result <- cbind(
+  data.frame(
+    "Comparison" = c(
+      "M.HO3.airway.epi-M.SFA.airway.epi",
+      "F.HO3.airway.epi-F.SFA.airway.epi",
+      "M.HO3.alveolar.epi-M.SFA.alveolar.epi",
+      "F.HO3.alveolar.epi-F.SFA.alveolar.epi"
+      )
+    ),
+  rbind(
+    fun.stat.t(
+      # input data
+      d.p2,
+      # metadata columns
+      2,
+      # grouping variable
+      "Group2",
+      # group 1
+      "M.HO3.airway.epi",
+      # group 2
+      "M.SFA.airway.epi",
+      # list of compound names for annotating result
+      names(
+        d[,9:ncol(d)]
+        )
+      ),
+    fun.stat.t(d.p2,2,"Group2","F.HO3.airway.epi","F.SFA.airway.epi",names(d[,9:ncol(d)])),
+    fun.stat.t(d.p2,2,"Group2","M.HO3.alveolar.epi","M.SFA.alveolar.epi",names(d[,9:ncol(d)])),
+    fun.stat.t(d.p2,2,"Group2","F.HO3.alveolar.epi","F.SFA.alveolar.epi",names(d[,9:ncol(d)]))
+    )
+  )
+
+## Plot result
+# ggsave(
+#   "analysis/4.statistics/plot.pos.stats.vol.FemaleAWvsAlv.SFA.png",
+#   fun.vol.s(
+#   data.frame(
+#     "Name" = names(d.p2.result[,2:ncol(d.p2.result)]),
+#     "FC" = t(d.fold[14,2:ncol(d.fold)])[,1],
+#     "P" = t(d.p2.result[2,2:ncol(d.p2.result)])[,1]
+#     ),
+#   "FC","P","Name",4,
+#   "Female Airway Epithelium vs. Alveoli Control"
+#   ),
+#   width = 8,
+#   height = 6,
+#   dpi = 800
+#   )
+
+## Save table for ChemRICH
+cr.in <- fun.ChemRICH.input(
+  # p-value input df
+  d.p2.result,
+  # fold change input df
+  d.fold,
+  # feature metadata
+  md.feat,
+  # grouping column for calculating ChemRICH
+  "label.saturation"
+  )
+
+write.table(
+  cr.in,
+  "analysis/data.neg.ChemRICH.input.ho3vssfa.txt",
+  col.names = T,
+  row.names = F,
+  sep = "\t"
+  )
+
+
+```
+
+
+
+
+
+
+# 4.3. ChemRICH
+
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+
+# Source functions
+source(
+  "scripts/4.2.chemrich.R",
+  local = knitr::knit_global()
+  )
+
+# load datasets for positive and negative (must have matching column names)
+chemrich.input <- rbind(
+  read.table(
+    "analysis/data.pos.ChemRICH.input.ho3vssfa.txt",
+    sep = "\t",
+    header = T
+    ),
+  read.table(
+    "analysis/data.neg.ChemRICH.input.ho3vssfa.txt",
+    sep = "\t",
+    header = T
+    )
+  )
+
+# Create plots for specified comparisons
+### 4/35,5/21,6/30,7/8,5/9,4/31,6/34,7/16
+chemrich.plot <- fun.cr.run.alt(
+  chemrich.input,
+  7,
+  16,
+  3,
+  "Class"
+  )
+fun.cr.plot(
+  chemrich.plot,
+  "Lipid Class",
+  "plot.ChemRICH.alvepi.male.ho3vssfa"
+  )
+
+## Volcano plot
+ggsave(
+  "analysis/plot.stats.vol.awepi.male.HDMO3vsCtrl.png",
+  fun.vol.s(
+  data.frame(
+    "Name" = chemrich.input[["Name"]],
+    "FC" = chemrich.input[[31]],
+    "P" = chemrich.input[[4]]
+    ),
+  "FC","P","Name",4,
+  "Male Airway Epithelium - HDM + O3 vs. Control"
+  ),
+  width = 8,
+  height = 6,
+  dpi = 800
+  )
+
+```
+
+
+
+
+
+# 5.1. Miscellaneous Functions
+
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+
+# Source functions
+source(
+  "scripts/5.1.misc.functions.R",
+  local = knitr::knit_global()
+  )
+
+
+
+```
+
+
+
+
+
+
+

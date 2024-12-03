@@ -1,0 +1,26 @@
+{
+    "id": "1A2DB5B5",
+    "path": "~/Dev/RegioMSI/R/2.1.data.import.R",
+    "project_path": "R/2.1.data.import.R",
+    "type": "r_source",
+    "hash": "2801542153",
+    "contents": "",
+    "dirty": false,
+    "created": 1718219839530.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "144,5",
+        "scrollLine": "112"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1718385380,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1718385380638,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -1,157 +1,99 @@
-#' Format processed MSI data for normalization
+#' Normalization Formatting
 #'
-#' Annotates binned peak lists by matching m/z values in complimentary LC-MS/MS data acquired
-#' separately from an MSI experiment. Defaults to matching m/z values between MSI and LC-MS/MS data within 10 mDa.
+#' Annotates MSImagingExperiment objects by matching m/z values
+#' in a provided reference list. Defaults to matching m/z values
+#' within a 10 mDa threshold.
 #'
-#' @param msi.d A dense matrix containing MSI data from all annotated compounds in each study sample.
-#' @param an.list A data frame containing annotated MSI peaks matched to a separate LC-MS/MS dataset.
-#' @param p.md A data frame containing treatment and group information for each imaging run.
-#' @return Formatted pixel, feature, and image data for downstream normalization and statistical analysis.
+#' @param ldp A processed MSImagingExperiment.
+#' @param la A data frame containing reference-matched MSI peaks.
+#' @param md A data frame containing treatment and group information.
+#' @return Formatted pixel, feature, and image data for downstream analysis.
 #' @examples
-#' # Load processed data, annotation list, and sample metadata table
-#' ## Processed data
-#' if(
-#'   !exists("d") &
-#'   file.exists("data.processed.rds")
-#'   )
-#'  {
-#'   d <- readRDS(
-#'     "data.processed.rds"
-#'     )
-#'  }
-#' Cardinal::imageData(d)
 #'
-#' ## Annotation list
-#' d.anno <- read.table(
-#'   "data.annotated.neg.curated.txt",
-#'   header = T,
-#'   sep = "\t"
-#' )
-#'
-#' ## pixel metadata
-#' d.group <- read.table(
-#'   "sample.metadata.neg.txt",
-#'   sep = "\t",
-#'   header = T
-#' )
-#'
-#' ## Format data (also saves formatted outputs)
-#' msi.norm.form <- MSI.norm.format(
-#'   # Image data
-#'   d,
-#'   # Curated annotation list
-#'   d.anno,
-#'   # Pixel metadata
-#'   d.group
-#' )
+#' # d_norm <- msi_norm_form(
+#' #   ldp = d2a[["Data.filtered"]],
+#' #   la = d2a[["Annotated"]],
+#' #   md = md1
+#' # )
 #'
 #' @export
-MSI.norm.format <- function(msi.d,an.list,p.md) {
-  d <- msi.d
-  d.anno <- an.list
-  d.group <- p.md
-
+msi_norm_form <- function(ldp, la, md) {
+  d <- ldp
+  d_anno <- la
+  d_group <- md
   ## annotation list
-  d.anno <- d.anno[
-    !duplicated(d.anno[["mz.timsTOF"]]),
-    ]
-  d.anno[["mz.join"]] <- as.character(
+  names(d_anno)
+  d_anno <- d_anno[!duplicated(d_anno[["mz.timsTOF"]]), ]
+  d_anno[["mz.join"]] <- as.character(
     round(
-      d.anno[["mz.timsTOF"]],
+      d_anno[["mz.timsTOF"]],
       digits = 4
-      )
     )
-
+  )
   ## feature metadata
-  md.feat <- dplyr::left_join(
+  md_feat <- dplyr::left_join(
     data.frame(
       "mz.join" = as.character(
         round(
           Cardinal::mz(d),
           digits = 4
-          )
-        ),
-      "num.feat" = Cardinal::features(d)
-      ),
-    d.anno,
-    by = "mz.join"
-    )
-
-  d.group[["ID"]] <- factor(
-    as.character(
-      d.group[["ID"]]
-      ),
-    levels = c(
-      seq.int(
-        1,
-        nrow(
-          d.group
-          ),
-        1
         )
-      )
-   )
-
-  md.samp <- data.frame(
+      ),
+      "num.feat" = Cardinal::features(d)
+    ),
+    d_anno,
+    by = "mz.join"
+  )
+  d_group[["ID"]] <- factor(
+    as.character(d_group[["ID"]]),
+    levels = c(seq.int(1, nrow(d_group), 1))
+  )
+  ## sample metadata
+  md_samp <- data.frame(
     "ID" = Cardinal::run(d),
     "pixel" = Cardinal::pixels(d),
     "X" = d@elementMetadata[["x"]],
     "Y" = d@elementMetadata[["y"]]
-    )
-
-  md.samp <- dplyr::full_join(
+  )
+  md_samp <- dplyr::full_join(
     data.frame(
       "ID" = Cardinal::run(d),
       "pixel" = Cardinal::pixels(d),
       "X" = d@elementMetadata[["x"]],
       "Y" = d@elementMetadata[["y"]]
-      ),
-    d.group,
+    ),
+    d_group,
     by = "ID"
-    )
-
-  md.samp <- md.samp[!is.na(md.samp[["pixel"]]),]
+  )
+  md_samp <- md_samp[!is.na(md_samp[["pixel"]]), ]
 
   ## bring spectra into memory
-  d.mat <- t(
-    Cardinal::as.matrix(
-      Cardinal::spectra(d)
-      )
-    )
+  d_mat <- t(Cardinal::as.matrix(Cardinal::spectra(d)))
 
   ## Save objects for downstream analysis
   ### feature metadata
   write.table(
-    md.feat,
-    "metadata.feature.txt",
-    col.names = T,
-    row.names = F,
+    md_feat,
+    paste("analysis/table.", lp1[["polarity"]], "meta.feat.txt", sep = ""), # nolint
+    col.names = TRUE,
+    row.names = FALSE,
     sep = "\t"
-    )
+  )
   ### pixel metadata
   write.table(
-    md.samp,
-    "metadata.pixel.txt",
-    col.names = T,
-    row.names = F,
+    md_samp,
+    paste("analysis/table.", lp1[["polarity"]], "meta.samp.txt", sep = ""), # nolint
+    col.names = TRUE,
+    row.names = FALSE,
     sep = "\t"
-    )
+  )
   ### data matrix
-  saveRDS(
-    d.mat,
-    "msi.data.matrix.rds"
-    )
-
+  saveRDS(d_mat, paste("analysis/data.", lp1[["polarity"]], "matrix.rds")) # nolint
   return(
     list(
-      "Data" = d.mat,
-      "Feature" = md.feat,
-      "Pixel" = md.samp
-      )
+      "Data" = d_mat,
+      "Feature" = md_feat,
+      "Pixel" = md_samp
     )
-
-  }
-
-
-
-
+  )
+}

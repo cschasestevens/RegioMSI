@@ -1,0 +1,27 @@
+library(devtools)
+
+load_all()
+
+# Dataset input parameters
+list.p <- MSI.InputParams("data/","neg",300,900,5)
+# Load all .imzML
+list.d <- MSI.LoadAll(list.p)
+# Detect peaks for combined data list
+d.peaks <- MSI.detectpeaks(
+  # Data file list
+  list.d[["Data.files"]],
+  # Input parameters
+  list.p,
+  # Process in parallel (TRUE/FALSE)
+  TRUE
+  )
+
+# Peak binning
+MSI.binpeaks(
+  # Sample information
+
+  # Data file list
+
+  # Processed peak list
+)
+

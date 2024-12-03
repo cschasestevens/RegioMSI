@@ -1,0 +1,26 @@
+{
+    "id": "073C8739",
+    "path": "//wsl.localhost/Ubuntu/home/ncsteven/analyze/RegioMSI/R/2.2a.process.peaks.detection.R",
+    "project_path": null,
+    "type": "r_source",
+    "hash": "0",
+    "contents": "",
+    "dirty": false,
+    "created": 1719948796759.0,
+    "source_on_save": false,
+    "relative_order": 4,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "146,5",
+        "scrollLine": "151"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1719960550,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1719960550439,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -10,7 +10,7 @@
 #' @param parl Should processing be run in parallel? Note: only supported by WSL2 or Linux; will default to sequential processing if toggled 'TRUE' on Windows OS.
 #' @return A list containing a data frame of processed peaks and processing details.
 #' @examples
-#' MSI.binpeaks(list.d[["Sample.Info"]],list.d[["Data.files"]],d.peaks,TRUE)
+#' # MSI.binpeaks(list.d[["Sample.Info"]],list.d[["Data.files"]],d.peaks,TRUE)
 #'
 #' @export
 MSI.binpeaks <- function(
@@ -740,7 +740,3 @@ MSI.binpeaks <- function(
 
   print("All samples have been successfully binned! The binned results are included in the .rds batch files...")
   }
-
-
-
-

@@ -1,0 +1,186 @@
+#### Intrasample processing of MSI data (based on Cardinal) ####
+
+#---- Peak Detection ----
+
+MSI.detectpeaks <- function(parallel){
+  if(Sys.info()[["sysname"]] != "Windows" &
+     parallel == TRUE) {
+    Cardinal::setCardinalBPPARAM(
+      MulticoreParam(
+        workers = 4,
+        progressbar = T
+      )
+    )
+  }
+  
+  if(Sys.info()[["sysname"]] == "Windows" &
+     parallel == TRUE) {
+    Cardinal::setCardinalBPPARAM(
+      MulticoreParam(
+        workers = 4,
+        progressbar = T
+      )
+    )
+  }
+  
+  if(Sys.info()[["sysname"]] != "Windows" &
+     parallel == FALSE) {
+    setCardinalBPPARAM(
+      MulticoreParam(
+        workers = 4,
+        progressbar = T
+      )
+    )
+  }
+  
+  if(Sys.info()[["sysname"]] == "Windows" &
+     parallel == FALSE) {
+    setCardinalBPPARAM(
+      MulticoreParam(
+        workers = 4,
+        progressbar = T
+      )
+    )
+  }
+  
+  ?Cardinal::setCardinalBPPARAM()
+  
+  
+}
+
+
+getCardinalBPPARAM()
+
+if(Sys.info()[["sysname"]] != "Windows") {
+  setCardinalBPPARAM(
+    MulticoreParam(
+      workers = 4,
+      progressbar = T
+    )
+  )
+}
+
+getCardinalNumBlocks()
+ifelse(
+  sum(
+    unlist(
+      lapply(
+        list.d,
+        function(x) nrow(
+          coord(x)
+          )
+        )
+      )
+    )/
+    100 < 
+    2000,
+  n.chunk <- 100,
+  ifelse(
+    sum(
+      unlist(
+        lapply(
+          list.d,
+          function(x) 
+            nrow(
+              coord(x)
+              )
+          )
+        )
+      )/
+      1000 < 
+      2000,
+    n.chunk <- 1000,
+    n.chunk <- 10000
+    )
+  )
+
+setCardinalNumBlocks(
+  n = n.chunk
+  )
+getCardinalNumBlocks()
+
+
+### Align spectra (for every pixel), filter missing or low intensity peaks 
+### (<0.5% detected across all pixels; roughly equivalent to a peak that is detected in 10% of pixels in an individual image for
+### a dataset that includes 12 separate images)
+### Generates list of aligned m/z peaks detected for all samples
+### Use this output as a reference peak list for binning profile spectra to a single centroided spectra suitable for comparing across samples
+### Then normalize the binned spectra by sparse LOESS (sLOESS) correct for differences in intensity across sample run
+
+### combine MSI data
+n.freq <- (((sum(
+  unlist(
+    lapply(
+      list.d,
+      function(x) nrow(
+        coord(x)
+        )
+      )
+    )
+  )/
+  length(
+    list.d
+    )))*0.1)/(
+      sum(
+        unlist(
+          lapply(
+            list.d,
+            function(x) nrow(
+              coord(x)
+              )
+            )
+          )
+        )
+      )
+
+
+d <- do.call(cbind,list.d)
+proc.time()
+d.peaks <- process(
+  peakFilter(
+    peakAlign(
+      d,
+      tolerance = list.p[["resolution"]],
+      units = "ppm" 
+      ),
+    freq.min = n.freq
+    )
+  )
+
+### output stats
+proc.time()
+d.peaks
+getCardinalBPPARAM()
+getCardinalNumBlocks()
+
+saveRDS(
+  d.peaks,
+  file = "processing/2.2.process.peaks.rds"
+  )
+
+
+### Check alignment
+plot(
+  d.peaks,
+  pixel = (
+    median(
+      d@elementMetadata@coord$x
+    ) -
+      25
+  ):
+    (
+      median(
+        d@elementMetadata@coord$x
+      ) +
+        25
+    ),
+  xlim = c(
+    300,
+    900
+  ),
+  key = F,
+  superpose = T
+)
+
+
+
