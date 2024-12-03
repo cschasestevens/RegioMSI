@@ -21,7 +21,7 @@ knitr::opts_chunk$set(
 #### - Recommended hardware specs: Windows >10 with 128Gb of RAM OR Linux Ubuntu >22.04 with 128Gb of RAM
 
 ## 1.1. Installation of package and dependencies
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 # Install devtools and BiocManager
 install.packages("devtools")
 install.packages("BiocManager")
@@ -46,7 +46,7 @@ BiocManager::install("Cardinal")
 
 ## 2.1. Data Import
 #### Loads all .imzML files from specified folder 
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 library(RegioMSI)
 # Dataset input parameters
 lp1 <- msi_input_param(
@@ -64,7 +64,7 @@ names(d)
 
 ## 2.2. Processing: Peak Detection, Alignment, Binning, and Annotation
 #### Performs peak detection, alignment, binning, peak annotation, and assignment for all study samples. Detection and alignment are performed simultaneously to produce a single peak list for the entire dataset. Peaks from each sample are binned to the resulting reference list to convert data from profile to centroid and are used for downstream analyses. Peak annotations are optional but generally correspond to a list of compounds validated by LC-MS/MS.
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 #---- Peak detection ----
 # Perform all peak processing;
 # Previous versions of Cardinal required

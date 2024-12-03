@@ -537,16 +537,16 @@ MSI.stat.t <- function(
 #' @param g.var Treatment group column name.
 #' @return A merged data frame formatted for enrichment analysis based on user-defined compound classes.
 #' @examples
-#' cr.in <- MSI.ChemRICH.input(
-#' # p-value input df
-#' d.p2.result,
-#' # fold change input df
-#' d.fold,
-#' # feature metadata
-#' md.feat,
-#' # grouping column for calculating ChemRICH
-#' "label.saturation"
-#' )
+#' # cr.in <- MSI.ChemRICH.input(
+#' # # p-value input df
+#' # d.p2.result,
+#' # # fold change input df
+#' # d.fold,
+#' # # feature metadata
+#' # md.feat,
+#' # # grouping column for calculating ChemRICH
+#' # "label.saturation"
+#' # )
 #'
 #' @export
 MSI.ChemRICH.input <- function(

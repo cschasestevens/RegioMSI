@@ -24,6 +24,6 @@ Runs in parallel using 50% of available cores if run on WSL2 or Linux, and split
 of 3 samples or less to conserve resources. For use with older versions of Cardinal (< 3.6.3).
 }
 \examples{
-MSI.binpeaks(list.d[["Sample.Info"]],list.d[["Data.files"]],d.peaks,TRUE)
+# MSI.binpeaks(list.d[["Sample.Info"]],list.d[["Data.files"]],d.peaks,TRUE)
 
 }

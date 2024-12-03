@@ -24,15 +24,15 @@ This enrichment analysis method is adapted from Chemical Similarity Enrichment A
 in Barupal et. al. 2017 (DOI: 10.1038/s41598-017-15231-w).
 }
 \examples{
-cr.in <- MSI.ChemRICH.input(
-# p-value input df
-d.p2.result,
-# fold change input df
-d.fold,
-# feature metadata
-md.feat,
-# grouping column for calculating ChemRICH
-"label.saturation"
-)
+# cr.in <- MSI.ChemRICH.input(
+# # p-value input df
+# d.p2.result,
+# # fold change input df
+# d.fold,
+# # feature metadata
+# md.feat,
+# # grouping column for calculating ChemRICH
+# "label.saturation"
+# )
 
 }
