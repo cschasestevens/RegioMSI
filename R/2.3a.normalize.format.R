@@ -7,43 +7,52 @@
 #' @param ldp A processed MSImagingExperiment.
 #' @param la A data frame containing reference-matched MSI peaks.
 #' @param md A data frame containing treatment and group information.
+#' @param ftype Data to use for normalization (either "annotated" or "all").
+#' "Annotated" filters the MSI data based on features that are matched
+#' to the reference m/z list, whereas "all" retains all features in the
+#' dataset.
 #' @return Formatted pixel, feature, and image data for downstream analysis.
 #' @examples
 #'
 #' # d_norm <- msi_norm_form(
 #' #   ldp = d2a[["Data.filtered"]],
 #' #   la = d2a[["Annotated"]],
-#' #   md = md1
+#' #   md = md1,
+#' #   ftype = "annotated"
 #' # )
 #'
 #' @export
-msi_norm_form <- function(ldp, la, md) {
+msi_norm_form <- function(ldp, la, md, ftype) {
   d <- ldp
   d_anno <- la
   d_group <- md
   ## annotation list
-  names(d_anno)
-  d_anno <- d_anno[!duplicated(d_anno[["mz.timsTOF"]]), ]
-  d_anno[["mz.join"]] <- as.character(
-    round(
-      d_anno[["mz.timsTOF"]],
-      digits = 4
+  if(ftype == "annotated") { # nolint
+    d_anno <- d_anno[!duplicated(d_anno[["mz.timsTOF"]]), ]
+    d_anno[["mz.join"]] <- as.character(
+      round(
+        d_anno[["mz.timsTOF"]],
+        digits = 4
+      )
     )
-  )
-  ## feature metadata
-  md_feat <- dplyr::left_join(
-    data.frame(
-      "mz.join" = as.character(
-        round(
-          Cardinal::mz(d),
-          digits = 4
-        )
+    ## feature metadata
+    md_feat <- dplyr::left_join(
+      data.frame(
+        "mz.join" = as.character(
+          round(
+            Cardinal::mz(d),
+            digits = 4
+          )
+        ),
+        "num.feat" = Cardinal::features(d)
       ),
-      "num.feat" = Cardinal::features(d)
-    ),
-    d_anno,
-    by = "mz.join"
-  )
+      d_anno,
+      by = "mz.join"
+    )
+  }
+  if(ftype == "all") { # nolint
+    md_feat <- d_anno
+  }
   d_group[["ID"]] <- factor(
     as.character(d_group[["ID"]]),
     levels = c(seq.int(1, nrow(d_group), 1))
@@ -68,13 +77,13 @@ msi_norm_form <- function(ldp, la, md) {
   md_samp <- md_samp[!is.na(md_samp[["pixel"]]), ]
 
   ## bring spectra into memory
-  d_mat <- t(Cardinal::as.matrix(Cardinal::spectra(d)))
+  d_mat <- t(Cardinal::as.matrix(Cardinal::spectra(d, "intensity")))
 
   ## Save objects for downstream analysis
   ### feature metadata
   write.table(
     md_feat,
-    paste("analysis/table.", lp1[["polarity"]], "meta.feat.txt", sep = ""), # nolint
+    paste("analysis/table.", lp1[["polarity"]], ".meta.feat.txt", sep = ""), # nolint
     col.names = TRUE,
     row.names = FALSE,
     sep = "\t"
@@ -82,7 +91,7 @@ msi_norm_form <- function(ldp, la, md) {
   ### pixel metadata
   write.table(
     md_samp,
-    paste("analysis/table.", lp1[["polarity"]], "meta.samp.txt", sep = ""), # nolint
+    paste("analysis/table.", lp1[["polarity"]], ".meta.samp.txt", sep = ""), # nolint
     col.names = TRUE,
     row.names = FALSE,
     sep = "\t"

@@ -21,7 +21,7 @@ msi_peak_anno <- function(
   la
 ) {
   # Load peak and LC-MS/MS annotation list
-  d_peaks <- ldp[["Processed.Peaks"]]
+  d_peaks <- ldp
   list_anno <- la
 
   # Extract detected peaks and peak intensities
@@ -73,8 +73,6 @@ msi_peak_anno <- function(
     )
   )
   list_f_anno <- list_f_anno[!duplicated(list_f_anno), ]
-  ## Return unknowns
-  list_f_unk <- list_f[list_f[-c(list_f_anno$mz.timsTOF), "mz"], ]
   ## Return filtered data
   list_sub <- unique(list_f_anno[["Feature"]])
   list_d_anno <- d_peaks[c(list_sub), ]
@@ -84,7 +82,7 @@ msi_peak_anno <- function(
       "Data.filtered" = list_d_anno,
       "Data.original" = d_peaks,
       "Annotated" = list_f_anno,
-      "Unassigned" = list_f_unk
+      "All" = list_f
     )
   )
 }

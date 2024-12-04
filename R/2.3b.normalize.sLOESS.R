@@ -1,1078 +1,495 @@
-#' Normalization methods for MSI data
+#' MSI Data Normalization
 #'
-#' Various normalization methods for MSI data. MSI.norm.none() only calculates the TIC of each pixel
-#' but performs no normalization. This method is useful for comparing overall normalization performance.
-#' MSI.norm.TIC() performs total ion current normalization for each annotated compound. MSI.norm.sLOESS()
-#' implements sparse LOESS, which excludes pixels with zero signal intensity to preserve biological differences
-#' in compound spatial distribution while removing systematic artifacts incurred during data acquisition.
+#' Includes multiple methods for MSI data normalization. RegioMSI introduces
+#' sparse locally estimated scatterplot smoothing (sLOESS) normalization, which
+#' excludes pixels with zero signal intensity to preserve biological differences
+#' in compound spatial distribution while removing systematic artifacts
+#' incurred during data acquisition.
 #'
-#' @param msi.mat A dense matrix containing MSI data from all annotated compounds in each study sample.
-#' @param f A data frame containing metadata for each annotated compound.
-#' @param p A data frame containing formatted pixel metadata for each imaging run.
-#' @return A data matrix containing grouping information and normalized pixel intensities for each annotated compound.
+#' @param dm A MSI data matrix.
+#' @param feat A data frame containing metadata for each annotated compound.
+#' @param pix A data frame containing sample metadata for each pixel
+#' @param mtd Normalization method (either "none", "tic", "rms", or "sLOESS").
+#' @param parl (optional) Logical indicating if normalization
+#' should be performed in parallel.
+#' @param core_perc (optional) Percentage of cores to use for parallel
+#' normalization.
+#' @return A list containing normalized pixel intensities and metadata.
 #' @examples
-#' # Normalizations
-#' l.norm <- list(
-#'   "norm.none" = MSI.norm.none(
-#'     msi.norm.form[["Data"]],
-#'     msi.norm.form[["Feature"]],
-#'     msi.norm.form[["Pixel"]]
-#'   ),
-#'   "norm.TIC" = MSI.norm.TIC(
-#'     msi.norm.form[["Data"]],
-#'     msi.norm.form[["Feature"]],
-#'     msi.norm.form[["Pixel"]]
-#'   ),
-#'   "norm.sLOESS" = MSI.norm.sLOESS(
-#'     # Data matrix
-#'     msi.norm.form[["Data"]],
-#'     # Feature metadata
-#'     msi.norm.form[["Feature"]],
-#'     # Pixel metadata
-#'     msi.norm.form[["Pixel"]],
-#'     # Process in parallel (TRUE/FALSE)
-#'     TRUE,
-#'     # Percent of total cores to use (as decimal)
-#'     0.9
-#'   )
-#' )
+#'
+#' # d_norm <- msi_data_norm(
+#' #   dm = d_norm[["Data"]],
+#' #   feat = d_norm[["Feature"]],
+#' #   pix = d_norm[["Pixel"]],
+#' #   mtd = "sLOESS",
+#' #   parl = TRUE,
+#' #   core_perc = 0.2
+#' # )
+#'
+#' # d_norm <- msi_data_norm(
+#' #   dm = d_norm[["Data"]],
+#' #   feat = d_norm[["Feature"]],
+#' #   pix = d_norm[["Pixel"]],
+#' #   mtd = "tic"
+#' # )
 #'
 #' @export
-msi_data_norm <- function(dm, feat, pix) {
-  
-}
-MSI.norm.none <- function(msi.mat,f,p) {
-  d <- msi.mat
-  md.feat <- f
-  md.samp <- p
-  # Input data
-  dl <- data.frame(
-    "Group" = md.samp[["Group"]],
-    "ID" = md.samp[["ID"]],
-    "pixel" = md.samp[["pixel"]],
-    setNames(
-      as.data.frame(d),
-      c(md.feat[["Name"]])
-      )
+msi_data_norm <- function( # nolint
+  dm,
+  feat,
+  pix,
+  mtd,
+  parl = FALSE,
+  core_perc = NULL
+) {
+  # Load objects
+  d <- dm
+  mft <- feat
+  mpx <- pix
+
+  # No normalization
+  if(mtd == "none") { # nolint
+    print("Performing no normalization...")
+    mpx[["TIC.norm.none"]] <- unlist(lapply(
+      mc.cores = parallel::detectCores() * core_perc,
+      seq.int(1, ncol(t(d)), 1),
+      function(x) sum(t(d)[[x]])
+    ))
+    d1 <- list(
+      "data" = d,
+      "features" = mft,
+      "pixels" = mpx,
+      "norm.method" = "none"
     )
-  return(dl)
   }
-
-
-#' Normalization methods for MSI data
-#'
-#' Various normalization methods for MSI data. MSI.norm.none() only calculates the TIC of each pixel
-#' but performs no normalization. This method is useful for comparing overall normalization performance.
-#' MSI.norm.TIC() performs total ion current normalization for each annotated compound. MSI.norm.sLOESS()
-#' implements sparse LOESS, which excludes pixels with zero signal intensity to preserve biological differences
-#' in compound spatial distribution while removing systematic artifacts incurred during data acquisition.
-#'
-#' @param msi.mat A dense matrix containing MSI data from all annotated compounds in each study sample.
-#' @param f A data frame containing metadata for each annotated compound.
-#' @param p A data frame containing formatted pixel metadata for each imaging run.
-#' @return A data matrix containing grouping information and normalized pixel intensities for each annotated compound.
-#' @examples
-#' # Normalizations
-#' l.norm <- list(
-#'   "norm.none" = MSI.norm.none(
-#'     msi.norm.form[["Data"]],
-#'     msi.norm.form[["Feature"]],
-#'     msi.norm.form[["Pixel"]]
-#'   ),
-#'   "norm.TIC" = MSI.norm.TIC(
-#'     msi.norm.form[["Data"]],
-#'     msi.norm.form[["Feature"]],
-#'     msi.norm.form[["Pixel"]]
-#'   ),
-#'   "norm.sLOESS" = MSI.norm.sLOESS(
-#'     # Data matrix
-#'     msi.norm.form[["Data"]],
-#'     # Feature metadata
-#'     msi.norm.form[["Feature"]],
-#'     # Pixel metadata
-#'     msi.norm.form[["Pixel"]],
-#'     # Process in parallel (TRUE/FALSE)
-#'     TRUE,
-#'     # Percent of total cores to use (as decimal)
-#'     0.9
-#'   )
-#' )
-#'
-#' @export
-MSI.norm.TIC <- function(msi.mat,f,p) {
-  d <- msi.mat
-  md.feat <- f
-  md.samp <- p
-  # Input data
-  df.tic <- data.frame(
-    "Group" = md.samp[["Group"]],
-    "ID" = md.samp[["ID"]],
-    setNames(
-      as.data.frame(d),
-      c(md.feat[["Name"]]
+  # TIC normalization
+  if(mtd == "tic") { # nolint
+    if(Sys.info()[["sysname"]] == "Windows" | parl == FALSE) { # nolint
+      print(
+        "Detected OS is Windows or parl is FALSE;
+        Defaulting to sequential processing..."
       )
-    )
-  )
-
-  df.tic <- data.frame(
-    "pixel.mTIC" = apply(
-      df.tic[,3:ncol(
-        df.tic
-      )],
-      1,
-      function(x)
-        sum(x)
-    ),
-    df.tic
-  )
-
-  df.tic <- dplyr::select(
-    dplyr::left_join(
-      df.tic,
-      setNames(
-        aggregate(
-          df.tic[["pixel.mTIC"]],
-          list(
-            df.tic[["Group"]]
-          ),
-          function(x)
-            sum(x)
-        ),
-        c(
-          "Group","mTIC.sum"
+      dtic <- data.frame(
+        "pixel.TIC" = unlist(
+          lapply(
+            seq.int(1, ncol(t(d)), 1),
+            function(x) sum(as.data.frame(t(d))[[x]])
+          )
         )
-      ),
-      by = "Group"
-    ),
-    c(
-      "mTIC.sum",
-      everything()
-    )
-  )
-
-  df.tic[,5:ncol(df.tic)] <- as.data.frame(
-    lapply(
-      df.tic[,5:ncol(df.tic)],
-      function(x)
-        (x/
-           df.tic[["mTIC.sum"]]
-         )*
-        mean(
-          df.tic[["mTIC.sum"]]
-          )
       )
-    )
-
-  df.tic <- data.frame(
-    "mTIC.norm" = apply(
-      df.tic[,5:ncol(
-        df.tic
-      )],
-      1,
-      function(x)
-        sum(x)
-    ),
-    df.tic
-  )
-
-  return(df.tic)
-
-  }
-
-
-#' Normalization methods for MSI data
-#'
-#' Various normalization methods for MSI data. MSI.norm.none() only calculates the TIC of each pixel
-#' but performs no normalization. This method is useful for comparing overall normalization performance.
-#' MSI.norm.TIC() performs total ion current normalization for each annotated compound. MSI.norm.sLOESS()
-#' implements sparse LOESS, which excludes pixels with zero signal intensity to preserve biological differences
-#' in compound spatial distribution while removing systematic artifacts incurred during data acquisition.
-#'
-#' @param msi.mat A dense matrix containing MSI data from all annotated compounds in each study sample.
-#' @param f A data frame containing metadata for each annotated compound.
-#' @param p A data frame containing formatted pixel metadata for each imaging run.
-#' @param parl Logical indicating whether data normalization for each compound should be run in parallel (Linux and WSL2 only).
-#' @param core.perc Percentage of available cores to use if running in parallel (Linux and WSL2 only).
-#' @return A data matrix containing grouping information and normalized pixel intensities for each annotated compound.
-#' @examples
-#' # Normalizations
-#' l.norm <- list(
-#'   "norm.none" = MSI.norm.none(
-#'     msi.norm.form[["Data"]],
-#'     msi.norm.form[["Feature"]],
-#'     msi.norm.form[["Pixel"]]
-#'   ),
-#'   "norm.TIC" = MSI.norm.TIC(
-#'     msi.norm.form[["Data"]],
-#'     msi.norm.form[["Feature"]],
-#'     msi.norm.form[["Pixel"]]
-#'   ),
-#'   "norm.sLOESS" = MSI.norm.sLOESS(
-#'     # Data matrix
-#'     msi.norm.form[["Data"]],
-#'     # Feature metadata
-#'     msi.norm.form[["Feature"]],
-#'     # Pixel metadata
-#'     msi.norm.form[["Pixel"]],
-#'     # Process in parallel (TRUE/FALSE)
-#'     TRUE,
-#'     # Percent of total cores to use (as decimal)
-#'     0.9
-#'   )
-#' )
-#'
-#' @export
-MSI.norm.sLOESS <- function(
-    msi.mat,
-    f,
-    p,
-    parl,
-    core.perc
-    ){
-  d <- msi.mat
-  md.feat <- f
-  md.samp <- p
-  # Input data
-  dl <- data.frame(
-    "Group" = md.samp[["Group"]],
-    "ID" = md.samp[["ID"]],
-    "pixel" = md.samp[["pixel"]],
-    setNames(
-      as.data.frame(d),
-      c(md.feat[["Name"]])
-      )
-    )
-
-  # Perform sparse loess normalization for each annotated compound
-  if(Sys.info()[["sysname"]] == "Windows" &
-     parl == FALSE) {
-
-    dl.sloess <- as.data.frame(
-      lapply(
-        seq.int(
-          4,
-          ncol(dl),
-          1
-        ),
-        function(x) {
-
-          # Filter 0 values to ignore in LOESS calculation
-          dl2 <- dl[
-            dl[[names(dl[x])]] > 0,
-            c("ID","pixel",names(dl[x]))
-          ]
-          # Run LOESS
-          dl2.fit <- as.data.frame(
-            lowess(
-              x = dl2[["pixel"]],
-              y = dl2[[names(dl[x])]],
-              # use 10% of the average pixel number per sample for span
-              f = ((length(dl2[["pixel"]])/
-                      length(
-                        unique(
-                          dl2[["ID"]]
-                        )
-                      )
-              )*
-                0.1)/
-                length(dl2[["pixel"]]),
-              iter = 5,
-              delta = 0
-            )
-          )
-          # Normalize based on fitted model
-          dl3 <- setNames(
+      dtic <- dplyr::select(
+        dplyr::left_join(
+          data.frame("Group" = mpx[["Group"]], dtic),
+          setNames(
             aggregate(
-              dl2[[names(dl[x])]],
-              list(dl2[["ID"]]),
-              function(x)
-                mean(x)
-            ),
-            c("ID","pixel.mean")
-          )
-
-          dl2[["norm"]] <- (
-            dl2[[names(dl[x])]]/
-              dl2.fit[["y"]]
-          )*
-            median(
-              dl3[["pixel.mean"]]
-            )
-          # Recombine with original data
-          dl4 <- dplyr::left_join(
-            dl[,
-               c("ID","pixel",names(dl[x])
-               )
-            ],
-            dl2[,
-                c("pixel","norm"
-                )
-            ],
-            by = "pixel"
-          )
-
-          dl4[
-            is.na(dl4[["norm"]]),
-            "norm"
-          ] <- 0
-
-          dl4 <- setNames(
-            dplyr::select(
-              dl4,
-              c("norm")
-            ),
-            c(
-              names(dl[x])
-            )
-          )
-
-          return(dl4)
-        }
-      )
-    )
-
-  }
-
-
-  if(Sys.info()[["sysname"]] == "Windows" &
-     parl == TRUE) {
-    # Cluster setup
-    clus1 <- parallel::makeCluster(
-      ceiling(
-        parallel::detectCores()*
-          core.perc
-          )
-        )
-    ## Pass libraries and functions to cluster
-    parallel::clusterEvalQ(
-      clus1,{
-        ### Libraries
-        library(dplyr)
-        ### Functions
-        }
-      )
-    ## Export global environment variables to cluster
-    parallel::clusterExport(
-      clus1,
-      varlist = c(
-        "dl"
-        )
-      )
-
-    dl.sloess <- as.data.frame(
-      parallel::parLapply(
-        clus1,
-        seq.int(
-          4,
-          ncol(dl),
-          1
-          ),
-        function(x) {
-
-          # Filter 0 values to ignore in LOESS calculation
-          dl2 <- dl[
-            dl[[names(dl[x])]] > 0,
-            c("ID","pixel",names(dl[x]))
-            ]
-          # Run LOESS
-          dl2.fit <- as.data.frame(
-            lowess(
-              x = dl2[["pixel"]],
-              y = dl2[[names(dl[x])]],
-              # use 10% of the average pixel number per sample for span
-              f = ((length(dl2[["pixel"]])/
-                      length(
-                        unique(
-                          dl2[["ID"]]
-                        )
-                      )
-              )*
-                0.1)/
-                length(dl2[["pixel"]]),
-              iter = 5,
-              delta = 0
-            )
-          )
-          # Normalize based on fitted model
-          dl3 <- setNames(
-            aggregate(
-              dl2[[names(dl[x])]],
-              list(dl2[["ID"]]),
-              function(x)
-                mean(x)
-            ),
-            c("ID","pixel.mean")
-          )
-
-          dl2[["norm"]] <- (
-            dl2[[names(dl[x])]]/
-              dl2.fit[["y"]]
-          )*
-            median(
-              dl3[["pixel.mean"]]
-            )
-          # Recombine with original data
-          dl4 <- dplyr::left_join(
-            dl[,
-               c("ID","pixel",names(dl[x])
-               )
-            ],
-            dl2[,
-                c("pixel","norm"
-                )
-            ],
-            by = "pixel"
-          )
-
-          dl4[
-            is.na(dl4[["norm"]]),
-            "norm"
-            ] <- 0
-
-          dl4 <- setNames(
-            dplyr::select(
-              dl4,
-              c("norm")
+              dtic[["pixel.TIC"]],
+              list(
+                mpx[["Group"]]
               ),
-            c(
-              names(dl[x])
+              function(x) sum(x)
+            ),
+            c("Group", "TIC.sum")
+          ),
+          by = "Group"
+        ),
+        c("TIC.sum", dplyr::everything())
+      )
+      d <- as.matrix(lapply(
+        seq.int(1, ncol(as.data.frame(d)), 1),
+        function(x) {
+          (as.data.frame(d)[[x]] / dtic[["TIC.sum"]]) *
+            mean(dtic[["TIC.sum"]])
+        }
+      ))
+      mpx[["TIC.norm.tic"]] <- unlist(lapply(
+        seq.int(1, ncol(t(d)), 1),
+        function(x) sum(t(d)[[x]])
+      ))
+    }
+    if(Sys.info()[["sysname"]] != "Windows" && # nolint
+        parl == TRUE
+    ) {
+      dtic <- data.frame(
+        "pixel.TIC" = unlist(
+          parallel::mclapply(
+            mc.cores = parallel::detectCores() * core_perc,
+            seq.int(1, ncol(t(d)), 1),
+            function(x) sum(as.data.frame(t(d))[[x]])
+          )
+        )
+      )
+      dtic <- dplyr::select(
+        dplyr::left_join(
+          data.frame("Group" = mpx[["Group"]], dtic),
+          setNames(
+            aggregate(
+              dtic[["pixel.TIC"]],
+              list(
+                mpx[["Group"]]
+              ),
+              function(x) sum(x)
+            ),
+            c("Group", "TIC.sum")
+          ),
+          by = "Group"
+        ),
+        c("TIC.sum", dplyr::everything())
+      )
+      d <- as.matrix(parallel::mclapply(
+        mc.cores = parallel::detectCores() * core_perc,
+        seq.int(1, ncol(as.data.frame(d)), 1),
+        function(x) {
+          (as.data.frame(d)[[x]] / dtic[["TIC.sum"]]) *
+            mean(dtic[["TIC.sum"]])
+        }
+      ))
+      mpx[["TIC.norm.tic"]] <- unlist(parallel::mclapply(
+        mc.cores = parallel::detectCores() * core_perc,
+        seq.int(1, ncol(t(d)), 1),
+        function(x) sum(t(d)[[x]])
+      ))
+    }
+    d1 <- list(
+      "data" = d,
+      "features" = mft,
+      "pixels" = mpx,
+      "norm.method" = "tic"
+    )
+  }
+  # RMS normalization
+  if(mtd == "rms") { # nolint
+    if(Sys.info()[["sysname"]] == "Windows" | parl == FALSE) { # nolint
+      print(
+        "Detected OS is Windows or parl is FALSE;
+        Defaulting to sequential processing..."
+      )
+      dtic <- data.frame(
+        "pixel.RMS" = unlist(
+          lapply(
+            seq.int(1, ncol(t(d)), 1),
+            function(x) sqrt(mean(sum((as.data.frame(t(d))[[x]]) ^ 2)))
+          )
+        )
+      )
+      d <- as.matrix(lapply(
+        seq.int(1, ncol(as.data.frame(d)), 1),
+        function(x) {
+          (as.data.frame(d)[[x]] / dtic[["pixel.RMS"]]) *
+            mean(dtic[["pixel.RMS"]])
+        }
+      ))
+      mpx[["TIC.norm.rms"]] <- unlist(lapply(
+        seq.int(1, ncol(t(d)), 1),
+        function(x) sum(t(d)[[x]])
+      ))
+    }
+    if(Sys.info()[["sysname"]] != "Windows" && # nolint
+        parl == TRUE
+    ) {
+      dtic <- data.frame(
+        "pixel.RMS" = unlist(
+          parallel::mclapply(
+            mc.cores = parallel::detectCores() * core_perc,
+            seq.int(1, ncol(t(d)), 1),
+            function(x) sqrt(mean(sum((as.data.frame(t(d))[[x]]) ^ 2)))
+          )
+        )
+      )
+      d <- as.matrix(parallel::mclapply(
+        mc.cores = parallel::detectCores() * core_perc,
+        seq.int(1, ncol(as.data.frame(d)), 1),
+        function(x) {
+          (as.data.frame(d)[[x]] / dtic[["pixel.RMS"]]) *
+            mean(dtic[["pixel.RMS"]])
+        }
+      ))
+      mpx[["TIC.norm.rms"]] <- unlist(parallel::mclapply(
+        mc.cores = parallel::detectCores() * core_perc,
+        seq.int(1, ncol(t(d)), 1),
+        function(x) sum(t(d)[[x]])
+      ))
+    }
+    d1 <- list(
+      "data" = d,
+      "features" = mft,
+      "pixels" = mpx,
+      "norm.method" = "rms"
+    )
+  }
+  # sLOESS normalization
+  if(mtd == "sLOESS") { # nolint
+    if(Sys.info()[["sysname"]] != "Windows" && # nolint
+        parl == TRUE
+    ) {
+      d <- setNames(
+        as.data.frame(parallel::mclapply(
+          mc.cores = ceiling(parallel::detectCores() * core_perc),
+          seq.int(1, ncol(as.data.frame(d)), 1),
+          function(x) {
+            d <- data.frame(
+              "ID" = mpx[["ID"]],
+              "pixel" = mpx[["pixel"]],
+              as.data.frame(d)[[x]]
+            )
+            # Filter 0 values to ignore in LOESS calculation
+            dl2 <- d[d[[3]] > 0, ]
+            # Run LOESS
+            dl2_fit <- as.data.frame(
+              lowess(
+                x = dl2[["pixel"]],
+                y = dl2[[3]],
+                # use 10% of the average pixel number per sample for span
+                f = ((length(dl2[["pixel"]]) / length(
+                  unique(dl2[["ID"]])
+                )
+                ) * 0.1) /
+                  length(dl2[["pixel"]]),
+                iter = 5,
+                delta = 0
               )
             )
-
-          return(dl4)
+            # Normalize based on fitted model
+            dl3 <- setNames(
+              aggregate(
+                dl2[[3]],
+                list(dl2[["ID"]]),
+                function(x) mean(x)
+              ),
+              c("ID", "pixel.mean")
+            )
+            dl2[["norm"]] <- (dl2[[3]] / dl2_fit[["y"]]) *
+              median(dl3[["pixel.mean"]])
+            dl2[is.na(dl2[["norm"]]), "norm"] <- 0
+            dl4 <- setNames(dl2[, c("norm")], c(paste("X", x, sep = ".")))
+            return(dl4)
           }
-        )
+        )),
+        c(paste(
+          rep("X", ncol(as.data.frame(d))),
+          seq.int(1, ncol(as.data.frame(d)), 1),
+          sep = "."
+        ))
       )
-
-    parallel::stopCluster(clus1)
-
+      mpx[["TIC.norm.sloess"]] <- unlist(parallel::mclapply(
+        mc.cores = parallel::detectCores() * core_perc,
+        seq.int(1, ncol(t(as.matrix(d))), 1),
+        function(x) sum(t(as.matrix(d))[[x]])
+      ))
     }
-
-  if(Sys.info()[["sysname"]] != "Windows" &
-     parl == TRUE) {
-
-    dl.sloess <- setNames(
-      parallel::mclapply(
-        mc.cores = ceiling(
-          parallel::detectCores()*
-            core.perc
-          ),
-        seq.int(
-          4,
-          ncol(dl),
-          1
-        ),
-        function(x) {
-
-          # Filter 0 values to ignore in LOESS calculation
-          dl2 <- dl[
-            dl[[names(dl[x])]] > 0,
-            c("ID","pixel",names(dl[x]))
-            ]
-          # Run LOESS
-          dl2.fit <- as.data.frame(
-            lowess(
-              x = dl2[["pixel"]],
-              y = dl2[[names(dl[x])]],
-              # use 10% of the average pixel number per sample for span
-              f = ((length(dl2[["pixel"]])/
-                      length(
-                        unique(
-                          dl2[["ID"]]
-                        )
-                      )
-              )*
-                0.1)/
-                length(dl2[["pixel"]]),
-              iter = 5,
-              delta = 0
+    if(Sys.info()[["sysname"]] == "Windows" | # nolint
+        parl == FALSE
+    ) {
+      d <- setNames(
+        as.data.frame(lapply(
+          seq.int(1, ncol(as.data.frame(d)), 1),
+          function(x) {
+            d <- data.frame(
+              "ID" = mpx[["ID"]],
+              "pixel" = mpx[["pixel"]],
+              as.data.frame(d)[[x]]
             )
-          )
-          # Normalize based on fitted model
-          dl3 <- setNames(
-            aggregate(
-              dl2[[names(dl[x])]],
-              list(dl2[["ID"]]),
-              function(x)
-                mean(x)
-            ),
-            c("ID","pixel.mean")
-          )
-
-          dl2[["norm"]] <- (
-            dl2[[names(dl[x])]]/
-              dl2.fit[["y"]]
-          )*
-            median(
-              dl3[["pixel.mean"]]
-            )
-          # Recombine with original data
-          dl4 <- dplyr::left_join(
-            dl[,
-               c("ID","pixel",names(dl[x])
-               )
-            ],
-            dl2[,
-                c("pixel","norm"
+            # Filter 0 values to ignore in LOESS calculation
+            dl2 <- d[d[[3]] > 0, ]
+            # Run LOESS
+            dl2_fit <- as.data.frame(
+              lowess(
+                x = dl2[["pixel"]],
+                y = dl2[[3]],
+                # use 10% of the average pixel number per sample for span
+                f = ((length(dl2[["pixel"]]) / length(
+                  unique(dl2[["ID"]])
                 )
-            ],
-            by = "pixel"
-          )
-
-          dl4[
-            is.na(dl4[["norm"]]),
-            "norm"
-          ] <- 0
-
-          dl4 <- setNames(
-            dplyr::select(
-              dl4,
-              c("norm")
-            ),
-            c(
-              names(dl[x])
+                ) * 0.1) /
+                  length(dl2[["pixel"]]),
+                iter = 5,
+                delta = 0
+              )
             )
-          )
-
-          return(dl4)
-        }
-      ),
-      c(
-        names(
-          dl[,4:ncol(dl)]
-        )
+            # Normalize based on fitted model
+            dl3 <- setNames(
+              aggregate(
+                dl2[[3]],
+                list(dl2[["ID"]]),
+                function(x) mean(x)
+              ),
+              c("ID", "pixel.mean")
+            )
+            dl2[["norm"]] <- (dl2[[3]] / dl2_fit[["y"]]) *
+              median(dl3[["pixel.mean"]])
+            dl2[is.na(dl2[["norm"]]), "norm"] <- 0
+            dl4 <- setNames(dl2[, c("norm")], c(paste("X", x, sep = ".")))
+            return(dl4)
+          }
+        )),
+        c(paste(
+          rep("X", ncol(as.data.frame(d))),
+          seq.int(1, ncol(as.data.frame(d)), 1),
+          sep = "."
+        ))
       )
+      mpx[["TIC.norm.sloess"]] <- unlist(lapply(
+        seq.int(1, ncol(t(as.matrix(d))), 1),
+        function(x) sum(t(as.matrix(d))[[x]])
+      ))
+    }
+    d1 <- list(
+      "data" = as.matrix(d),
+      "features" = mft,
+      "pixels" = mpx,
+      "norm.method" = "sloess"
     )
   }
+  return(d1)
+}
 
-  if(Sys.info()[["sysname"]] != "Windows" &
-     parl == FALSE) {
-
-    dl.sloess <- setNames(
-      lapply(
-        seq.int(
-          4,
-          ncol(dl),
-          1
-        ),
-        function(x) {
-
-          # Filter 0 values to ignore in LOESS calculation
-          dl2 <- dl[
-            dl[[names(dl[x])]] > 0,
-            c("ID","pixel",names(dl[x]))
-          ]
-          # Run LOESS
-          dl2.fit <- as.data.frame(
-            lowess(
-              x = dl2[["pixel"]],
-              y = dl2[[names(dl[x])]],
-              # use 10% of the average pixel number per sample for span
-              f = ((length(dl2[["pixel"]])/
-                      length(
-                        unique(
-                          dl2[["ID"]]
-                        )
-                      )
-              )*
-                0.1)/
-                length(dl2[["pixel"]]),
-              iter = 5,
-              delta = 0
-            )
-          )
-          # Normalize based on fitted model
-          dl3 <- setNames(
-            aggregate(
-              dl2[[names(dl[x])]],
-              list(dl2[["ID"]]),
-              function(x)
-                mean(x)
-            ),
-            c("ID","pixel.mean")
-          )
-
-          dl2[["norm"]] <- (
-            dl2[[names(dl[x])]]/
-              dl2.fit[["y"]]
-          )*
-            median(
-              dl3[["pixel.mean"]]
-            )
-          # Recombine with original data
-          dl4 <- dplyr::left_join(
-            dl[,
-               c("ID","pixel",names(dl[x])
-               )
-            ],
-            dl2[,
-                c("pixel","norm"
-                )
-            ],
-            by = "pixel"
-          )
-
-          dl4[
-            is.na(dl4[["norm"]]),
-            "norm"
-          ] <- 0
-
-          dl4 <- setNames(
-            dplyr::select(
-              dl4,
-              c("norm")
-            ),
-            c(
-              names(dl[x])
-            )
-          )
-
-          return(dl4)
-        }
-      ),
-      c(
-        names(
-          dl[,4:ncol(dl)]
-        )
-      )
-    )
-  }
-
-
-  # Combine original metadata with normalized data frame
-  dl.sloess2 <- cbind(
-    dl[1:3],
-    dl.sloess
-    )
-
-  return(dl.sloess2)
-
-  }
-
-
-
-
-
-#' Scatterplot for comparing normalization performance
+#' Normalization QC
 #'
-#' Visualizes a series of scatter plots comparing various normalization methods for MSI data.
+#' Scatter plot visualization to evaluate normalization performance.
 #'
-#' @param df A data matrix containing grouping information and normalized pixel intensities for each annotated compound.
-#' @param var.x Variable to be plotted on the x-axis (this is usually the acquisition order of each pixel).
-#' @param var.d Variable to be plotted on the y-axis (this is usually the TIC intensity for each pixel).
-#' @param var.g Variable to be used for grouping of scatterplot points (this is usually the imaging run ID for each sample).
-#' @return A scatter plot visualizing pixel intensities over time to compare normalization performance.
+#' @param df A data frame containing pixel metadata.
+#' @param var_x X-axis variable (usually the acquisition order of each pixel).
+#' @param var_y Y-axis (usually the TIC intensity for each pixel).
+#' @param var_g Grouping variable (usually the imaging run ID for each sample).
+#' @param y_lim Upper limit of the y-axis.
+#' @return A scatter plot visualizing pixel intensities over time.
 #' @examples
-#' ## Append Raw/TIC/sLOESS counts to sample metadata
-#' msi.norm.form[["Pixel"]] <- data.frame(
-#'   msi.norm.form[["Pixel"]],
-#'   "mTIC.pixel.raw" = apply(
-#'     l.norm[["norm.none"]][
-#'       ,
-#'       4:ncol(l.norm[["norm.none"]])
-#'     ],
-#'     1,
-#'     function(x)
-#'       sum(x)
-#'   ),
-#'   "mTIC.pixel.TIC" = l.norm[["norm.TIC"]][["mTIC.norm"]],
-#'   "mTIC.pixel.sLOESS" = apply(
-#'     l.norm[["norm.sLOESS"]][
-#'       ,
-#'       4:ncol(l.norm[["norm.sLOESS"]])
-#'     ],
-#'     1,
-#'     function(x)
-#'       sum(x)
-#'   )
-#' )
 #'
-#' ## Save plot
-#' ggplot2::ggsave(
-#'   "plot.norm.TIC.png",
-#'   ggpubr::ggarrange(
-#'     ## Raw
-#'     MSI.plot.TIC(
-#'       ## sample metadata
-#'       msi.norm.form[["Pixel"]],
-#'       ## pixel column
-#'       "pixel",
-#'       ## TIC for selected norm
-#'       "mTIC.pixel.raw",
-#'       ## Sample ID column
-#'       "ID"
-#'     ),
-#'     MSI.plot.TIC(
-#'       msi.norm.form[["Pixel"]],
-#'       "pixel",
-#'       "mTIC.pixel.TIC",
-#'       "ID"
-#'     ),
-#'     MSI.plot.TIC(
-#'       msi.norm.form[["Pixel"]],
-#'       "pixel",
-#'       "mTIC.pixel.sLOESS",
-#'       "ID"
-#'     ),
-#'     ncol = 3,
-#'     common.legend = T,
-#'     labels = c("Raw","TIC","sLOESS")
-#'   ),
-#'   width = 18,
-#'   height = 6,
-#'   dpi = 600
-#' )
+#' # ptic <- msi_plot_tic(
+#' #   df = d_norm[["pixels"]],
+#' #   var_x = "pixel",
+#' #   var_y = "TIC.norm.tic",
+#' #   var_g = "ID",
+#' #   y_lim = 40000
+#' # )
 #'
 #' @export
-MSI.plot.TIC <- function(
-    df,
-    var.x,
-    var.d,
-    var.g
-    ) {
+msi_plot_tic <- function(
+  df,
+  var_x,
+  var_y,
+  var_g,
+  y_lim
+) {
   ggplot2::ggplot(
     df,
     ggplot2::aes(
-      x = .data[[var.x]],
-      y = .data[[var.d]]
-      )
-    ) +
+      x = .data[[var_x]], # nolint
+      y = .data[[var_y]]
+    )
+  ) +
     ggplot2::geom_point(
-    ggplot2::aes(
-      color = as.factor(.data[[var.g]])),
-      shape=16,
+      ggplot2::aes(
+        color = as.factor(.data[[var_g]])
+      ),
+      shape = 16,
       size = 1,
       alpha = 0.5
     ) +
-  ggplot2::geom_smooth(color = "firebrick1") +
+    ggplot2::geom_smooth(color = "firebrick1") +
     ggplot2::labs(y = "Intensity",
-       x = "Pixel") +
-  Regio.theme1() +
-    ggplot2::scale_color_manual(values = Regio.col.univ()) +
-    ggplot2::scale_y_continuous(limits = c(0,40000))
-
-  }
-
-
-
-# #---- Calculate and visualize group RSDs ----
-#
-# MSI.calc.RSD <- function(
-#     df,
-#     md,
-#     var.g,
-#     df.feat,
-#     var.n
-#     ) {
-#
-#   ## calculate group RSDs for each compound
-#   q.rsd <- setNames(
-#     purrr::reduce(
-#       lapply(
-#         seq.int(
-#           (md + 1),
-#           ncol(df),
-#           1
-#           ),
-#         function(x)
-#           aggregate(
-#             df[
-#               df[[x]] > 0,
-#               names(df[x])
-#               ],
-#             list(
-#               df[
-#                 df[[x]] > 0,
-#                 var.g
-#                 ]
-#               ),
-#             function(y)
-#               (sd(y)/mean(y))*100)),
-#       dplyr::left_join,
-#       by = "Group.1"
-#       ),
-#     c(
-#       "Group.RSD",
-#       df.feat[[var.n]]
-#       )
-#     )
-#
-#   ## format output for plotting
-#   p.rsd <- reshape2::melt(
-#     q.rsd,
-#     id.vars = "Group.RSD"
-#     )
-#
-#   p.rsd[["value"]] <- round(
-#     as.numeric(
-#       p.rsd[["value"]]
-#       ),
-#     digits = 2
-#     )
-#
-#   p.rsd <- p.rsd[
-#     order(p.rsd[["Group.RSD"]]),
-#     ]
-#   p.rsd[["ID"]] <- seq.int(
-#     1,
-#     nrow(p.rsd),
-#     1
-#     )
-#
-#   return(
-#     list(
-#       "all.group.rsd" = p.rsd,
-#       "median.rsd" = aggregate(
-#         p.rsd[["value"]],
-#         list(
-#           p.rsd[["Group.RSD"]]
-#           ),
-#         function(x)
-#           median(x)
-#           )
-#         )
-#       )
-#   }
-#
-#
-# MSI.plot.RSD <- function(
-#     df,
-#     var.x,
-#     var.rsd,
-#     var.g
-#     ) {
-#
-#   ggplot2::ggplot(
-#     df,
-#     ggplot2::aes(
-#       x = .data[[var.x]],
-#       y = .data[[var.rsd]]
-#     )
-#   ) +
-#     ggplot2::geom_point(
-#       ggplot2::aes(
-#         color = .data[[var.g]]),
-#       shape=16,
-#       size = 1,
-#       alpha = 0.5
-#     ) +
-#     ggplot2::geom_hline(
-#       yintercept = max(
-#         aggregate(
-#           df[["value"]],
-#           list(
-#             df[[var.g]]
-#           ),
-#           function(x)
-#             median(x)
-#         )[["x"]]
-#       ),
-#       linetype = "dashed",
-#       color = "firebrick1") +
-#     ggplot2::labs(
-#       y = "Group % RSD",
-#       x = "Index"
-#     ) +
-#     Regio.theme1() +
-#     ggplot2::scale_color_manual(values = Regio.col.univ())
-#
-#   }
-
-
-
-
-
-#' Ion images for comparing normalization performance
-#'
-#' Visualizes a series of ion images comparing various normalization methods for each imaging run.
-#'
-#' @param df A data matrix containing grouping information and normalized pixel intensities for each annotated compound.
-#' @param var.int Variable corresponding to the pixel intensity for each sample.
-#' @param var.g Sample ID variable.
-#' @param perc.int quantile to be used for the intensity color scale to improve contrast in ion images.
-#' @return An ion image visualizing pixel intensities to compare normalization performance.
-#' @examples
-#' ## Plot TIC of each normalization for each sample
-#' ggplot2::ggsave(
-#'   "plot.norm.image.sLOESS.png",
-#'   MSI.plot.AllImage(
-#'     # Input df
-#'     msi.norm.form[["Pixel"]],
-#'     # Intensity to plot
-#'     "mTIC.pixel.sLOESS",
-#'     # Sample ID variable
-#'     "ID",
-#'     # Percentile for scaling contrast of images
-#'     0.9
-#'   ),
-#'   width = 6,
-#'   height = 10,
-#'   dpi = 300
-#' )
-#'
-#' @export
-MSI.plot.AllImage <- function(
-    df,
-    var.int,
-    var.g,
-    perc.int
-    ) {
-
-  d1 <- df
-  d1[is.na(d1[[var.int]])] <- 0
-
-
-  p1 <- ggplot2::ggplot(
-    d1,
-    ggplot2::aes(
-      x = X,
-      y = Y
-      )
+      x = "Pixel"
     ) +
-    ggplot2::geom_raster(
-      ggplot2::aes(
-        fill = .data[[var.int]]
-        ),
-      interpolate = T
-      ) +
-    Regio.theme2() +
-    ggplot2::labs(fill = "Intensity") +
-    ggplot2::scale_y_reverse() +
-    ggplot2::scale_fill_gradientn(
-      colors = Regio.col.grad(),
-      limits = c(
-        0,
-        quantile(d1[[var.int]],
-                 perc.int
-                 )
-        ),
-      na.value = Regio.col.grad()[[12]]
-      ) +
-    ggplot2::facet_wrap(
-      . ~ .data[[var.g]],
-      ncol = ceiling(
-        length(
-          unique(
-            d1[[var.g]]
-            )
-          )/
-          2
-        )
-      )
-
-  return(p1)
-
-  }
-
-
-#' Ion image for comparing normalization performance
-#'
-#' Visualizes a single ion image comparing various normalization methods.
-#'
-#' @param df A data matrix containing grouping information and normalized pixel intensities for each annotated compound.
-#' @param var.int Variable corresponding to the pixel intensity for each sample.
-#' @param var.g Sample ID variable.
-#' @param samp.no Specific sample ID to plot.
-#' @param perc.int quantile to be used for the intensity color scale to improve contrast in ion images.
-#' @return An ion image visualizing pixel intensities to compare normalization performance.
-#' @examples
-## Plot for representative sample
-#' ggplot2::ggsave(
-#'   "plot.norm.image.compare.png",
-#'   ggpubr::ggarrange(
-#'     MSI.plot.OneImage(
-#'       # Input df
-#'       msi.norm.form[["Pixel"]],
-#'       # Intensity to plot
-#'       "mTIC.pixel.raw",
-#'       # Sample ID variable
-#'       "ID",
-#'       # Sample number
-#'       1,
-#'       # Percentile for scaling contrast of images
-#'       0.99
-#'     ),
-#'     MSI.plot.OneImage(
-#'       # Input df
-#'       msi.norm.form[["Pixel"]],
-#'       # Intensity to plot
-#'       "mTIC.pixel.TIC",
-#'       # Sample ID variable
-#'       "ID",
-#'       # Sample number
-#'       1,
-#'       # Percentile for scaling contrast of images
-#'       0.99
-#'     ),
-#'     MSI.plot.OneImage(
-#'       # Input df
-#'       msi.norm.form[["Pixel"]],
-#'       # Intensity to plot
-#'       "mTIC.pixel.sLOESS",
-#'       # Sample ID variable
-#'       "ID",
-#'       # Sample number
-#'       1,
-#'       # Percentile for scaling contrast of images
-#'       0.99
-#'     ),
-#'     labels = c(
-#'       "Raw",
-#'       "mTIC",
-#'       "sLOESS"
-#'     ),
-#'     nrow = 1,
-#'     common.legend = T,
-#'     legend = "bottom"
-#'   ),
-#'   width = 24,
-#'   height = 12,
-#'   dpi = 600
-#' )
-#'
-#' @export
-MSI.plot.OneImage <- function(
-    df,
-    var.int,
-    var.g,
-    samp.no,
-    perc.int
-) {
-
-  d1 <- df[df[[var.g]] == samp.no,]
-  d1[is.na(d1[[var.int]])] <- 0
-
-  p1 <- ggplot2::ggplot(
-    d1,
-    ggplot2::aes(
-      x = X,
-      y = Y
-    )
-  ) +
-    ggplot2::geom_raster(
-      ggplot2::aes(
-        fill = .data[[var.int]]
-      ),
-      interpolate = T
-    ) +
-    Regio.theme2() +
-    ggplot2::labs(fill = "Intensity") +
-    ggplot2::scale_y_reverse() +
-    ggplot2::scale_fill_gradientn(
-      colors = Regio.col.grad(),
-      limits = c(
-        0,
-        quantile(d1[[var.int]],
-                 perc.int
-        )
-      ),
-      na.value = Regio.col.grad()[[12]]
-    )
-
-  return(p1)
-
+    msi_theme1() + # nolint
+    ggplot2::scale_color_manual(values = col_univ()) + # nolint
+    ggplot2::scale_y_continuous(limits = c(0, y_lim))
 }
 
-
-
-
+#' Ion Image QC
+#'
+#' Plots the normalized pixel intensities as an ion image for each sample.
+#'
+#' @param df A normalized data matrix.
+#' @param var_y Variable corresponding to the pixel intensity for each sample.
+#' @param var_g Sample ID variable.
+#' @param perc_int Quantile to be used for the intensity color scale
+#' to improve contrast in ion images.
+#' @param spl_samp Plot a specific sample
+#' (default is to plot all sample images).
+#' @param samp_no If spl_samp is TRUE, which sample number should be plotted?
+#' @return An ion image visualizing total normalized pixel intensities.
+#' @examples
+#'
+#' # ptic_img <- msi_plot_img_tic(
+#' #   df = d_norm[["pixels"]],
+#' #   var_y = "TIC.norm.tic",
+#' #   var_g = "ID",
+#' #   perc_int = 95
+#' # )
+#'
+#' @export
+msi_plot_img_tic <- function(
+  df,
+  var_y,
+  var_g,
+  perc_int,
+  spl_samp = FALSE,
+  samp_no = NULL
+) {
+  if(spl_samp == FALSE) { # nolint
+    d1 <- df
+    d1[is.na(d1[[var_y]])] <- 0
+    p1 <- ggplot2::ggplot(
+      d1,
+      ggplot2::aes(
+        x = X, # nolint
+        y = Y # nolint
+      )
+    ) +
+      ggplot2::geom_raster(
+        ggplot2::aes(
+          fill = .data[[var_y]] # nolint
+        ),
+        interpolate = TRUE
+      ) +
+      msi_theme2() + # nolint
+      ggplot2::labs(fill = "Intensity") +
+      ggplot2::scale_y_reverse() +
+      ggplot2::scale_fill_gradientn(
+        colors = col_grad(), # nolint
+        limits = c(
+          0,
+          quantile(
+            d1[[var_y]],
+            perc_int
+          )
+        ),
+        na.value = col_grad()[[12]]
+      ) +
+      ggplot2::facet_wrap(
+        . ~ .data[[var_g]],
+        ncol = ceiling(length(unique(d1[[var_g]])) / 2)
+      )
+  }
+  if(spl_samp == TRUE) { # nolint
+    d1 <- df[df[[var_g]] == samp_no, ]
+    d1[is.na(d1[[var_y]])] <- 0
+    p1 <- ggplot2::ggplot(
+      d1,
+      ggplot2::aes(
+        x = X, # nolint
+        y = Y # nolint
+      )
+    ) +
+      ggplot2::geom_raster(
+        ggplot2::aes(
+          fill = .data[[var_y]] # nolint
+        ),
+        interpolate = TRUE
+      ) +
+      msi_theme2() + # nolint
+      ggplot2::labs(fill = "Intensity") +
+      ggplot2::scale_y_reverse() +
+      ggplot2::scale_fill_gradientn(
+        colors = col_grad(), # nolint
+        limits = c(
+          0,
+          quantile(
+            d1[[var_y]],
+            perc_int
+          )
+        ),
+        na.value = col_grad()[[12]]
+      )
+  }
+  return(p1)
+}
