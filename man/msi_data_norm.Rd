@@ -2,52 +2,51 @@
 % Please edit documentation in R/2.3b.normalize.sLOESS.R
 \name{msi_data_norm}
 \alias{msi_data_norm}
-\title{Normalization methods for MSI data}
+\title{MSI Data Normalization}
 \usage{
-msi_data_norm(dm, feat, pix)
+msi_data_norm(dm, feat, pix, mtd, parl = FALSE, core_perc = NULL)
 }
 \arguments{
-\item{msi.mat}{A dense matrix containing MSI data from all annotated compounds in each study sample.}
+\item{dm}{A MSI data matrix.}
 
-\item{f}{A data frame containing metadata for each annotated compound.}
+\item{feat}{A data frame containing metadata for each annotated compound.}
 
-\item{p}{A data frame containing formatted pixel metadata for each imaging run.}
+\item{pix}{A data frame containing sample metadata for each pixel}
+
+\item{mtd}{Normalization method (either "none", "tic", "rms", or "sLOESS").}
+
+\item{parl}{(optional) Logical indicating if normalization
+should be performed in parallel.}
+
+\item{core_perc}{(optional) Percentage of cores to use for parallel
+normalization.}
 }
 \value{
-A data matrix containing grouping information and normalized pixel intensities for each annotated compound.
+A list containing normalized pixel intensities and metadata.
 }
 \description{
-Various normalization methods for MSI data. MSI.norm.none() only calculates the TIC of each pixel
-but performs no normalization. This method is useful for comparing overall normalization performance.
-MSI.norm.TIC() performs total ion current normalization for each annotated compound. MSI.norm.sLOESS()
-implements sparse LOESS, which excludes pixels with zero signal intensity to preserve biological differences
-in compound spatial distribution while removing systematic artifacts incurred during data acquisition.
+Includes multiple methods for MSI data normalization. RegioMSI introduces
+sparse locally estimated scatterplot smoothing (sLOESS) normalization, which
+excludes pixels with zero signal intensity to preserve biological differences
+in compound spatial distribution while removing systematic artifacts
+incurred during data acquisition.
 }
 \examples{
-# Normalizations
-l.norm <- list(
-  "norm.none" = MSI.norm.none(
-    msi.norm.form[["Data"]],
-    msi.norm.form[["Feature"]],
-    msi.norm.form[["Pixel"]]
-  ),
-  "norm.TIC" = MSI.norm.TIC(
-    msi.norm.form[["Data"]],
-    msi.norm.form[["Feature"]],
-    msi.norm.form[["Pixel"]]
-  ),
-  "norm.sLOESS" = MSI.norm.sLOESS(
-    # Data matrix
-    msi.norm.form[["Data"]],
-    # Feature metadata
-    msi.norm.form[["Feature"]],
-    # Pixel metadata
-    msi.norm.form[["Pixel"]],
-    # Process in parallel (TRUE/FALSE)
-    TRUE,
-    # Percent of total cores to use (as decimal)
-    0.9
-  )
-)
+
+# d_norm <- msi_data_norm(
+#   dm = d_norm[["Data"]],
+#   feat = d_norm[["Feature"]],
+#   pix = d_norm[["Pixel"]],
+#   mtd = "sLOESS",
+#   parl = TRUE,
+#   core_perc = 0.2
+# )
+
+# d_norm <- msi_data_norm(
+#   dm = d_norm[["Data"]],
+#   feat = d_norm[["Feature"]],
+#   pix = d_norm[["Pixel"]],
+#   mtd = "tic"
+# )
 
 }

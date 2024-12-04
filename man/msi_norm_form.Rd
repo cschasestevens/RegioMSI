@@ -4,7 +4,7 @@
 \alias{msi_norm_form}
 \title{Normalization Formatting}
 \usage{
-msi_norm_form(ldp, la, md)
+msi_norm_form(ldp, la, md, ftype)
 }
 \arguments{
 \item{ldp}{A processed MSImagingExperiment.}
@@ -12,6 +12,11 @@ msi_norm_form(ldp, la, md)
 \item{la}{A data frame containing reference-matched MSI peaks.}
 
 \item{md}{A data frame containing treatment and group information.}
+
+\item{ftype}{Data to use for normalization (either "annotated" or "all").
+"Annotated" filters the MSI data based on features that are matched
+to the reference m/z list, whereas "all" retains all features in the
+dataset.}
 }
 \value{
 Formatted pixel, feature, and image data for downstream analysis.
@@ -26,7 +31,8 @@ within a 10 mDa threshold.
 # d_norm <- msi_norm_form(
 #   ldp = d2a[["Data.filtered"]],
 #   la = d2a[["Annotated"]],
-#   md = md1
+#   md = md1,
+#   ftype = "annotated"
 # )
 
 }
