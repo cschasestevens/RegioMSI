@@ -97,7 +97,7 @@ msi_norm_form <- function(ldp, la, md, ftype) {
     sep = "\t"
   )
   ### data matrix
-  saveRDS(d_mat, paste("analysis/data.", lp1[["polarity"]], "matrix.rds")) # nolint
+  saveRDS(d_mat, paste("analysis/data.", lp1[["polarity"]], ".matrix.rds", sep = "")) # nolint
   return(
     list(
       "Data" = d_mat,
