@@ -1,81 +1,31 @@
-MSI.PCA <- function(
-    so
-) {
-
-  d <- so
-
-  # Change assay, scale, and run PCA
-
-  Seurat::DefaultAssay(
-    object = d
-  ) <- "MSI"
-
-  d <- Seurat::RunPCA(
-    object = Seurat::ScaleData(
-      object = d,
-      verbose = T
-    ),
-    verbose = T
-  )
-
-  return(d)
-
-}
-
-#' Seurat-based KNN clustering and spatial segmentation
+#' Seurat-based KNN Clustering and Segmentation
 #'
-#' Converts MSI data to a Seurat object and performs spatial segmentation using the default implementation of the KNN algorithm used by Seurat.
+#' Converts MSI data to a Seurat object and performs spatial
+#' segmentation using the default implementation of KNN
+#' used by Seurat.
 #'
-#' @param sample.no Sample ID number.
+#' @param df A normalized data matrix.
+#' @param sample_no Sample ID number.
 #' @param md Number of metadata columns present in data matrix.
-#' @param span loess span parameter (proportion of pixels to fit model to; use lower proportion for tissues with small regions).
-#' @param clus.res Resolution to use for clustering (see Seurat FindClusters() documentation for details; larger number = more clusters).
-#' @return A Seurat object containing segmented clusters for a specified sample.
+#' @param span loess span parameter
+#' (proportion of pixels to fit model to;
+#' use lower proportion for tissues with small regions).
+#' @param clus_res Resolution to use for clustering
+#' (use ?Seurat::FindClusters() documentation for more details;
+#' larger number = more clusters).
+#' @return A Seurat object containing segmented clusters for a single sample.
 #' @examples
-#' # Find clusters for each sample
-#' d.seg <- setNames(
-#'   parallel::mclapply(
-#'     mc.cores = ceiling(
-#'       parallel::detectCores()*
-#'         0.5
-#'     ),
-#'     seq.int(
-#'       1,
-#'       length(
-#'         unique(
-#'           d[,c("ID")]
-#'         )
-#'       ),
-#'       1
-#'     ),
-#'     function(x)
-#'       MSI.Segment(
-#'         # sample number
-#'         x,
-#'         # metadata column number
-#'         8,
-#'         # loess span parameter (proportion of pixels to fit model to; use lower proportion for tissues with small regions)
-#'         0.1,
-#'         # resolution to use for clustering (see Seurat FindClusters() documentation for details; larger number, more clusters)
-#'         0.9
-#'       )
-#'   ),
-#'   c(
-#'     unique(
-#'       d[
-#'         ,
-#'         c("ID")
-#'       ]
-#'     )
-#'   )
-#' )
+#'
+#' # test <- msi_segment()
 #'
 #' @export
-MSI.Segment <- function(
-    sample.no,
-    md,
-    span,
-    clus.res) {
+msi_segment <- function(
+  df,
+  sample_no,
+  md,
+  span = 0.1,
+  clus_res = 0.9
+) {
 
   d.seg <- Seurat::CreateSeuratObject(
     counts = t(
@@ -98,6 +48,18 @@ MSI.Segment <- function(
   d.seg <- Seurat::FindVariableFeatures(
     d.seg,
     loess.span = span
+  )
+
+  Seurat::DefaultAssay(
+    object = d.seg
+  ) <- "MSI"
+
+  d <- Seurat::RunPCA(
+    object = Seurat::ScaleData(
+      object = d.seg,
+      verbose = T
+    ),
+    verbose = T
   )
 
   d.seg <- MSI.PCA(d.seg)

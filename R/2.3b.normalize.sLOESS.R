@@ -51,9 +51,8 @@ msi_data_norm <- function( # nolint
   if(mtd == "none") { # nolint
     print("Performing no normalization...")
     mpx[["TIC.norm.none"]] <- unlist(lapply(
-      mc.cores = parallel::detectCores() * core_perc,
-      seq.int(1, ncol(t(d)), 1),
-      function(x) sum(t(d)[[x]])
+      seq.int(1, ncol(t(as.matrix(d))), 1),
+      function(x) sum(as.data.frame(d)[x, ])
     ))
     d1 <- list(
       "data" = d,
@@ -69,11 +68,12 @@ msi_data_norm <- function( # nolint
         "Detected OS is Windows or parl is FALSE;
         Defaulting to sequential processing..."
       )
+      d <- as.data.frame(d)
       dtic <- data.frame(
         "pixel.TIC" = unlist(
           lapply(
-            seq.int(1, ncol(t(d)), 1),
-            function(x) sum(as.data.frame(t(d))[[x]])
+            seq.int(1, ncol(t(as.matrix(d))), 1),
+            function(x) sum(d[x, ])
           )
         )
       )
@@ -94,27 +94,28 @@ msi_data_norm <- function( # nolint
         ),
         c("TIC.sum", dplyr::everything())
       )
-      d <- as.matrix(lapply(
-        seq.int(1, ncol(as.data.frame(d)), 1),
+      d <- as.data.frame(lapply(
+        seq.int(1, ncol(d), 1),
         function(x) {
-          (as.data.frame(d)[[x]] / dtic[["TIC.sum"]]) *
+          (d[, x] / dtic[["TIC.sum"]]) *
             mean(dtic[["TIC.sum"]])
         }
       ))
       mpx[["TIC.norm.tic"]] <- unlist(lapply(
-        seq.int(1, ncol(t(d)), 1),
-        function(x) sum(t(d)[[x]])
+        seq.int(1, ncol(t(as.matrix(d))), 1),
+        function(x) sum(d[x, ])
       ))
     }
     if(Sys.info()[["sysname"]] != "Windows" && # nolint
         parl == TRUE
     ) {
+      d <- as.data.frame(d)
       dtic <- data.frame(
         "pixel.TIC" = unlist(
           parallel::mclapply(
             mc.cores = parallel::detectCores() * core_perc,
-            seq.int(1, ncol(t(d)), 1),
-            function(x) sum(as.data.frame(t(d))[[x]])
+            seq.int(1, ncol(t(as.matrix(d))), 1),
+            function(x) sum(d[x, ])
           )
         )
       )
@@ -135,18 +136,18 @@ msi_data_norm <- function( # nolint
         ),
         c("TIC.sum", dplyr::everything())
       )
-      d <- as.matrix(parallel::mclapply(
+      d <- as.data.frame(parallel::mclapply(
         mc.cores = parallel::detectCores() * core_perc,
-        seq.int(1, ncol(as.data.frame(d)), 1),
+        seq.int(1, ncol(d), 1),
         function(x) {
-          (as.data.frame(d)[[x]] / dtic[["TIC.sum"]]) *
+          (d[, x] / dtic[["TIC.sum"]]) *
             mean(dtic[["TIC.sum"]])
         }
       ))
       mpx[["TIC.norm.tic"]] <- unlist(parallel::mclapply(
         mc.cores = parallel::detectCores() * core_perc,
-        seq.int(1, ncol(t(d)), 1),
-        function(x) sum(t(d)[[x]])
+        seq.int(1, ncol(t(as.matrix(d))), 1),
+        function(x) sum(d[x, ])
       ))
     }
     d1 <- list(
@@ -163,50 +164,52 @@ msi_data_norm <- function( # nolint
         "Detected OS is Windows or parl is FALSE;
         Defaulting to sequential processing..."
       )
+      d <- as.data.frame(d)
       dtic <- data.frame(
         "pixel.RMS" = unlist(
           lapply(
             seq.int(1, ncol(t(d)), 1),
-            function(x) sqrt(mean(sum((as.data.frame(t(d))[[x]]) ^ 2)))
+            function(x) sqrt(mean(sum((d[x, ]) ^ 2)))
           )
         )
       )
-      d <- as.matrix(lapply(
-        seq.int(1, ncol(as.data.frame(d)), 1),
+      d <- as.data.frame(lapply(
+        seq.int(1, ncol(d), 1),
         function(x) {
-          (as.data.frame(d)[[x]] / dtic[["pixel.RMS"]]) *
+          (d[, x] / dtic[["pixel.RMS"]]) *
             mean(dtic[["pixel.RMS"]])
         }
       ))
       mpx[["TIC.norm.rms"]] <- unlist(lapply(
-        seq.int(1, ncol(t(d)), 1),
-        function(x) sum(t(d)[[x]])
+        seq.int(1, ncol(t(as.matrix(d))), 1),
+        function(x) sum(d[x, ])
       ))
     }
     if(Sys.info()[["sysname"]] != "Windows" && # nolint
         parl == TRUE
     ) {
+      d <- as.data.frame(d)
       dtic <- data.frame(
         "pixel.RMS" = unlist(
           parallel::mclapply(
             mc.cores = parallel::detectCores() * core_perc,
-            seq.int(1, ncol(t(d)), 1),
-            function(x) sqrt(mean(sum((as.data.frame(t(d))[[x]]) ^ 2)))
+            seq.int(1, ncol(t(as.matrix(d))), 1),
+            function(x) sqrt(mean(sum((d[x, ]) ^ 2)))
           )
         )
       )
-      d <- as.matrix(parallel::mclapply(
+      d <- as.data.frame(parallel::mclapply(
         mc.cores = parallel::detectCores() * core_perc,
-        seq.int(1, ncol(as.data.frame(d)), 1),
+        seq.int(1, ncol(d), 1),
         function(x) {
-          (as.data.frame(d)[[x]] / dtic[["pixel.RMS"]]) *
+          (d[, x] / dtic[["pixel.RMS"]]) *
             mean(dtic[["pixel.RMS"]])
         }
       ))
       mpx[["TIC.norm.rms"]] <- unlist(parallel::mclapply(
         mc.cores = parallel::detectCores() * core_perc,
-        seq.int(1, ncol(t(d)), 1),
-        function(x) sum(t(d)[[x]])
+        seq.int(1, ncol(t(as.matrix(d))), 1),
+        function(x) sum(d[x, ])
       ))
     }
     d1 <- list(
@@ -221,115 +224,111 @@ msi_data_norm <- function( # nolint
     if(Sys.info()[["sysname"]] != "Windows" && # nolint
         parl == TRUE
     ) {
-      d <- setNames(
-        as.data.frame(parallel::mclapply(
-          mc.cores = ceiling(parallel::detectCores() * core_perc),
-          seq.int(1, ncol(as.data.frame(d)), 1),
-          function(x) {
-            d <- data.frame(
-              "ID" = mpx[["ID"]],
-              "pixel" = mpx[["pixel"]],
-              as.data.frame(d)[[x]]
-            )
-            # Filter 0 values to ignore in LOESS calculation
-            dl2 <- d[d[[3]] > 0, ]
-            # Run LOESS
-            dl2_fit <- as.data.frame(
-              lowess(
-                x = dl2[["pixel"]],
-                y = dl2[[3]],
-                # use 10% of the average pixel number per sample for span
-                f = ((length(dl2[["pixel"]]) / length(
-                  unique(dl2[["ID"]])
-                )
-                ) * 0.1) /
-                  length(dl2[["pixel"]]),
-                iter = 5,
-                delta = 0
+      d <- as.data.frame(parallel::mclapply(
+        mc.cores = ceiling(parallel::detectCores() * core_perc),
+        seq.int(1, ncol(as.data.frame(d)), 1),
+        function(x) {
+          d <- data.frame(
+            "ID" = mpx[["ID"]],
+            "pixel" = mpx[["pixel"]],
+            as.data.frame(d)[[x]]
+          )
+          # Filter 0 values to ignore in LOESS calculation
+          dl2 <- d[d[[3]] > 0, ]
+          # Run LOESS
+          dl2_fit <- as.data.frame(
+            lowess(
+              x = dl2[["pixel"]],
+              y = dl2[[3]],
+              # use 10% of the average pixel number per sample for span
+              f = ((length(dl2[["pixel"]]) / length(
+                unique(dl2[["ID"]])
               )
+              ) * 0.1) /
+                length(dl2[["pixel"]]),
+              iter = 5,
+              delta = 0
             )
-            # Normalize based on fitted model
-            dl3 <- setNames(
-              aggregate(
-                dl2[[3]],
-                list(dl2[["ID"]]),
-                function(x) mean(x)
-              ),
-              c("ID", "pixel.mean")
-            )
-            dl2[["norm"]] <- (dl2[[3]] / dl2_fit[["y"]]) *
-              median(dl3[["pixel.mean"]])
-            dl2[is.na(dl2[["norm"]]), "norm"] <- 0
-            dl4 <- setNames(dl2[, c("norm")], c(paste("X", x, sep = ".")))
-            return(dl4)
-          }
-        )),
-        c(paste(
-          rep("X", ncol(as.data.frame(d))),
-          seq.int(1, ncol(as.data.frame(d)), 1),
-          sep = "."
-        ))
-      )
+          )
+          # Normalize based on fitted model
+          dl3 <- setNames(
+            aggregate(
+              dl2[[3]],
+              list(dl2[["ID"]]),
+              function(x) mean(x)
+            ),
+            c("ID", "pixel.mean")
+          )
+          dl2[["norm"]] <- (dl2[[3]] / dl2_fit[["y"]]) *
+            median(dl3[["pixel.mean"]])
+          dl4 <- dplyr::left_join(
+            d,
+            dl2,
+            by = "pixel"
+          )[, "norm"]
+          dl4[is.na(dl4)] <- 0
+          dl4 <- setNames(as.data.frame(dl4), paste("X", x, sep = "."))
+          return(dl4)
+        }
+      ))
       mpx[["TIC.norm.sloess"]] <- unlist(parallel::mclapply(
         mc.cores = parallel::detectCores() * core_perc,
         seq.int(1, ncol(t(as.matrix(d))), 1),
-        function(x) sum(t(as.matrix(d))[[x]])
+        function(x) sum(d[x, ])
       ))
     }
     if(Sys.info()[["sysname"]] == "Windows" | # nolint
         parl == FALSE
     ) {
-      d <- setNames(
-        as.data.frame(lapply(
-          seq.int(1, ncol(as.data.frame(d)), 1),
-          function(x) {
-            d <- data.frame(
-              "ID" = mpx[["ID"]],
-              "pixel" = mpx[["pixel"]],
-              as.data.frame(d)[[x]]
-            )
-            # Filter 0 values to ignore in LOESS calculation
-            dl2 <- d[d[[3]] > 0, ]
-            # Run LOESS
-            dl2_fit <- as.data.frame(
-              lowess(
-                x = dl2[["pixel"]],
-                y = dl2[[3]],
-                # use 10% of the average pixel number per sample for span
-                f = ((length(dl2[["pixel"]]) / length(
-                  unique(dl2[["ID"]])
-                )
-                ) * 0.1) /
-                  length(dl2[["pixel"]]),
-                iter = 5,
-                delta = 0
+      d <- as.data.frame(lapply(
+        seq.int(1, ncol(as.data.frame(d)), 1),
+        function(x) {
+          d <- data.frame(
+            "ID" = mpx[["ID"]],
+            "pixel" = mpx[["pixel"]],
+            as.data.frame(d)[[x]]
+          )
+          # Filter 0 values to ignore in LOESS calculation
+          dl2 <- d[d[[3]] > 0, ]
+          # Run LOESS
+          dl2_fit <- as.data.frame(
+            lowess(
+              x = dl2[["pixel"]],
+              y = dl2[[3]],
+              # use 10% of the average pixel number per sample for span
+              f = ((length(dl2[["pixel"]]) / length(
+                unique(dl2[["ID"]])
               )
+              ) * 0.1) /
+                length(dl2[["pixel"]]),
+              iter = 5,
+              delta = 0
             )
-            # Normalize based on fitted model
-            dl3 <- setNames(
-              aggregate(
-                dl2[[3]],
-                list(dl2[["ID"]]),
-                function(x) mean(x)
-              ),
-              c("ID", "pixel.mean")
-            )
-            dl2[["norm"]] <- (dl2[[3]] / dl2_fit[["y"]]) *
-              median(dl3[["pixel.mean"]])
-            dl2[is.na(dl2[["norm"]]), "norm"] <- 0
-            dl4 <- setNames(dl2[, c("norm")], c(paste("X", x, sep = ".")))
-            return(dl4)
-          }
-        )),
-        c(paste(
-          rep("X", ncol(as.data.frame(d))),
-          seq.int(1, ncol(as.data.frame(d)), 1),
-          sep = "."
-        ))
-      )
+          )
+          # Normalize based on fitted model
+          dl3 <- setNames(
+            aggregate(
+              dl2[[3]],
+              list(dl2[["ID"]]),
+              function(x) mean(x)
+            ),
+            c("ID", "pixel.mean")
+          )
+          dl2[["norm"]] <- (dl2[[3]] / dl2_fit[["y"]]) *
+            median(dl3[["pixel.mean"]])
+          dl4 <- dplyr::left_join(
+            d,
+            dl2,
+            by = "pixel"
+          )[, "norm"]
+          dl4[is.na(dl4)] <- 0
+          dl4 <- setNames(as.data.frame(dl4), paste("X", x, sep = "."))
+          return(dl4)
+        }
+      ))
       mpx[["TIC.norm.sloess"]] <- unlist(lapply(
         seq.int(1, ncol(t(as.matrix(d))), 1),
-        function(x) sum(t(as.matrix(d))[[x]])
+        function(x) sum(d[x, ])
       ))
     }
     d1 <- list(
