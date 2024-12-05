@@ -1,3 +1,128 @@
+#' MSI Processing QC
+#'
+#' Calculates descriptive statistics for each feature in a formatted
+#' MSI dataset. Can be used for subsequent artifact detection and
+#' removal.
+#'
+#' @param dm A MSI data matrix.
+#' @param feat A data frame containing metadata for each annotated compound.
+#' @param pix A data frame containing sample metadata for each pixel
+#' @param mtd Normalization method (either "none", "tic", "rms", or "sLOESS").
+#' @param parl (optional) Logical indicating if normalization
+#' should be performed in parallel.
+#' @param core_perc (optional) Percentage of cores to use for parallel
+#' normalization.
+#' @return A list containing normalized pixel intensities and metadata.
+#' @examples
+#'
+#' # data_qc <- msi_data_qc(
+#' #   dm = d_norm[["Data"]],
+#' #   feat = d_norm[["Feature"]],
+#' #   pix = d_norm[["Pixel"]],
+#' #   parl = FALSE,
+#' #   core_perc = 0.25
+#' # )
+#'
+#' @export
+msi_data_qc <- function(
+  dm,
+  feat,
+  pix,
+  parl = FALSE,
+  core_perc = NULL
+) {
+  d <- dm
+  mft <- feat
+  mpx <- pix
+  if(length(mft[["Name"]]) != ncol(d)) { # nolint
+    print("Error: Number of features does not match number of data columns!")
+  }
+  if(length(mft[["Name"]]) == ncol(d)) { # nolint
+    if(parl == TRUE) { # nolint
+      d_chk <- data.frame(
+        setNames(
+          as.data.frame(d), mft[["Name"]]
+        ),
+        "ID" = mpx[["ID"]],
+        "X" = mpx[["X"]],
+        "Y" = mpx[["Y"]]
+      )
+      # Flag potential artifacts based on descriptive stats
+      d_qc <- magrittr::set_rownames(dplyr::bind_rows(setNames(
+        parallel::mclapply(
+          mc.cores = ceiling(parallel::detectCores() * core_perc),
+          seq.int(1, ncol(d), 1),
+          function(x) {
+            d <- data.frame(
+              "Name" = names(d_chk)[[x]],
+              "int.mean" = round(mean(d_chk[[x]]), digits = 2),
+              "int.min" = round(min(d_chk[[x]]), digits = 2),
+              "int.med" = median(d_chk[[x]]),
+              "int.max" = round(max(d_chk[[x]]), digits = 2),
+              "sd" = round(sd(d_chk[[x]]), digits = 2),
+              "freq" = round(dplyr::count(d_chk, d_chk[[x]] > 0)[2, 2] /
+                  length(d_chk[[x]]), digits = 2
+              ),
+              "q1" = round(quantile(d_chk[[x]], 0.25), digits = 2),
+              "q2" = round(quantile(d_chk[[x]], 0.5), digits = 2),
+              "q3" = round(quantile(d_chk[[x]], 0.75), digits = 2),
+              "q4" = round(quantile(d_chk[[x]], 0.99), digits = 2)
+            )
+            return(d)
+          }
+        ),
+        mft[["Name"]]
+      )), seq.int(1, ncol(d), 1))
+      d_qc[["artifact.flag"]] <- ifelse(
+        d_qc[["freq"]] == 0 | d_qc[["q4"]] == 0,
+        TRUE,
+        FALSE
+      )
+    }
+    if(parl == FALSE | Sys.info()[["sysname"]] == "Windows") { # nolint
+      d_chk <- data.frame(
+        setNames(
+          as.data.frame(d), mft[["Name"]]
+        ),
+        "ID" = mpx[["ID"]],
+        "X" = mpx[["X"]],
+        "Y" = mpx[["Y"]]
+      )
+      # Flag potential artifacts based on descriptive stats
+      d_qc <- magrittr::set_rownames(dplyr::bind_rows(setNames(
+        lapply(
+          seq.int(1, ncol(d), 1),
+          function(x) {
+            d <- data.frame(
+              "Name" = names(d_chk)[[x]],
+              "int.mean" = round(mean(d_chk[[x]]), digits = 2),
+              "int.min" = round(min(d_chk[[x]]), digits = 2),
+              "int.med" = median(d_chk[[x]]),
+              "int.max" = round(max(d_chk[[x]]), digits = 2),
+              "sd" = round(sd(d_chk[[x]]), digits = 2),
+              "freq" = round(dplyr::count(d_chk, d_chk[[x]] > 0)[2, 2] /
+                  length(d_chk[[x]]), digits = 2
+              ),
+              "q1" = round(quantile(d_chk[[x]], 0.25), digits = 2),
+              "q2" = round(quantile(d_chk[[x]], 0.5), digits = 2),
+              "q3" = round(quantile(d_chk[[x]], 0.75), digits = 2),
+              "q4" = round(quantile(d_chk[[x]], 0.99), digits = 2)
+            )
+            return(d)
+          }
+        ),
+        mft[["Name"]]
+      )), seq.int(1, ncol(d), 1))
+      d_qc[["artifact.flag"]] <- ifelse(
+        d_qc[["freq"]] == 0 | d_qc[["q4"]] == 0,
+        TRUE,
+        FALSE
+      )
+    }
+  }
+  return(d_qc)
+}
+
 #' MSI Data Normalization
 #'
 #' Includes multiple methods for MSI data normalization. RegioMSI introduces
@@ -50,10 +175,21 @@ msi_data_norm <- function( # nolint
   # No normalization
   if(mtd == "none") { # nolint
     print("Performing no normalization...")
-    mpx[["TIC.norm.none"]] <- unlist(lapply(
-      seq.int(1, ncol(t(as.matrix(d))), 1),
-      function(x) sum(as.data.frame(d)[x, ])
-    ))
+    if(Sys.info()[["sysname"]] == "Windows" | parl == FALSE) { # nolint
+      d <- as.data.frame(d)
+      mpx[["TIC.norm.none"]] <- unlist(lapply(
+        seq.int(1, ncol(t(as.matrix(d))), 1),
+        function(x) sum(d[x, ])
+      ))
+    }
+    if(parl == TRUE) { # nolint
+      d <- as.data.frame(d)
+      mpx[["TIC.norm.none"]] <- unlist(parallel::mclapply(
+        mc.cores = ceiling(parallel::detectCores() * core_perc),
+        seq.int(1, ncol(t(as.matrix(d))), 1),
+        function(x) sum(d[x, ])
+      ))
+    }
     d1 <- list(
       "data" = d,
       "features" = mft,
@@ -184,6 +320,7 @@ msi_data_norm <- function( # nolint
         seq.int(1, ncol(t(as.matrix(d))), 1),
         function(x) sum(d[x, ])
       ))
+      mpx[is.nan(mpx[["TIC.norm.rms"]]), "TIC.norm.rms"] <- 0
     }
     if(Sys.info()[["sysname"]] != "Windows" && # nolint
         parl == TRUE
@@ -211,6 +348,7 @@ msi_data_norm <- function( # nolint
         seq.int(1, ncol(t(as.matrix(d))), 1),
         function(x) sum(d[x, ])
       ))
+      mpx[is.nan(mpx[["TIC.norm.rms"]]), "TIC.norm.rms"] <- 0
     }
     d1 <- list(
       "data" = d,
@@ -408,15 +546,15 @@ msi_plot_tic <- function(
 #' @return An ion image visualizing total normalized pixel intensities.
 #' @examples
 #'
-#' # ptic_img <- msi_plot_img_tic(
+#' # ptic_img <- msi_plot_img(
 #' #   df = d_norm[["pixels"]],
 #' #   var_y = "TIC.norm.tic",
 #' #   var_g = "ID",
-#' #   perc_int = 95
+#' #   perc_int = 0.95
 #' # )
 #'
 #' @export
-msi_plot_img_tic <- function(
+msi_plot_img <- function(
   df,
   var_y,
   var_g,
