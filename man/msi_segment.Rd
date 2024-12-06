@@ -4,12 +4,10 @@
 \alias{msi_segment}
 \title{Seurat-based KNN Clustering and Segmentation}
 \usage{
-msi_segment(df, sample_no, md, span = 0.1, clus_res = 0.9)
+msi_segment(df, md, span = 0.1, clus_res = 0.9)
 }
 \arguments{
 \item{df}{A normalized data matrix.}
-
-\item{sample_no}{Sample ID number.}
 
 \item{md}{Number of metadata columns present in data matrix.}
 
@@ -31,6 +29,9 @@ used by Seurat.
 }
 \examples{
 
-# test <- msi_segment()
+# d_seg <- msi_segment(
+#   df = t(as.matrix(d_norm2[["data"]])),
+#   md = d_norm2[["pixels"]]
+# )
 
 }

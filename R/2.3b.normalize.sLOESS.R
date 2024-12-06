@@ -357,7 +357,7 @@ msi_data_norm <- function( # nolint
       "norm.method" = "rms"
     )
   }
-  # sLOESS normalization
+  # sLOESS normalization (can divide into batches)
   if(mtd == "sLOESS") { # nolint
     if(Sys.info()[["sysname"]] != "Windows" && # nolint
         parl == TRUE

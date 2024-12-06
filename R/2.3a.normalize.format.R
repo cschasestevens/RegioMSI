@@ -52,6 +52,12 @@ msi_norm_form <- function(ldp, la, md, ftype) {
   }
   if(ftype == "all") { # nolint
     md_feat <- d_anno
+    md_feat[["Name"]] <- paste(
+      rep("X", nrow(md_feat)),
+      md_feat[["Feature"]],
+      round(md_feat[["mz"]], digits = 4),
+      sep = "."
+    )
   }
   d_group[["ID"]] <- factor(
     as.character(d_group[["ID"]]),

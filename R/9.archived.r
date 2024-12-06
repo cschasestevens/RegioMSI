@@ -264,3 +264,234 @@ fun.art.filter <- function(md,p.md) {
   return(d2)
   
 }
+
+#' Top-5 Cluster Heatmap
+#'
+#' Plots a heatmap of the top-5 compounds represented within each segmented cluster in a MSI Seurat object.
+#'
+#' @param so Seurat object containing segmented MSI data.
+#' @param marks List of cluster marker compounds to use for subsetting Seurat object.
+#' @param var.clus Cluster variable.
+#' @param hm.w Heatmap width.
+#' @param hm.h Heatmap height.
+#' @param fs.c Heatmap column font size.
+#' @param fs.r Heatmap row font size.
+#' @param sample.no Sample ID number.
+#' @return A heatmap displaying the top-5 markers for each cluster.
+#' @examples
+#' ## Change to lapply if not running on Linux or WSL2
+#' d.seg.mark <- setNames(
+#' parallel::mclapply(
+#'   mc.cores = ceiling(
+#'     parallel::detectCores()*
+#'       0.5
+#'   ),
+#'   seq.int(1,length(d.seg),1),
+#'   function(x){
+#'     # Find marker compounds for each calculated cluster
+#'     d.mark <- Seurat::FindAllMarkers(
+#'       d.seg[[x]],
+#'       test.use = "wilcox",
+#'       densify = T,
+#'       verbose = T
+#'     )
+#'     names(d.mark) <- c(
+#'       names(
+#'         d.mark[
+#'           ,
+#'           c(1:6)]
+#'       ),
+#'       "name"
+#'     )
+#'     d.mark[["ID"]] <- names(d.seg[x])
+#'
+#'     # Create top-5 heatmap
+#'     h.out <- MSI.markers.top5(
+#'       # Seurat object
+#'       d.seg[[x]],
+#'       # Marker gene list
+#'       d.mark,
+#'       # Cluster column
+#'       "Cluster",
+#'       # Heatmap width
+#'       24,
+#'       # Heatmap height
+#'       12,
+#'       # Column fontsize
+#'       6,
+#'       # Row fontsize
+#'       8,
+#'       # Sample number
+#'       x
+#'     )
+#'
+#'     return(
+#'       list(
+#'         "Markers" = d.mark,
+#'         "Plot" = h.out
+#'       )
+#'     )
+#'   }
+#' ),
+#' c(names(d.seg))
+#' )
+#'
+#' @export
+MSI.markers.top5 <- function(
+    so,
+    marks,
+    var.clus,
+    h.w,
+    h.h,
+    fs.c,
+    fs.r,
+    samp.no
+) {
+  ### Load data
+  d.mark <- marks
+  d.mark[["cluster.no"]] <- d.mark[["cluster"]]
+
+  ### Top 5 genes per cluster
+  d.mark <- dplyr::slice_max(
+    dplyr::group_by(
+      d.mark,
+      .data[["cluster.no"]]),
+    order_by = .data[["avg_log2FC"]],
+    n = 5
+  )[,c(
+    "name",
+    "cluster"
+  )]
+
+
+  ### Subset seurat and scale
+  Seurat::DefaultAssay(so) <- "MSI"
+
+  h <- Seurat::FetchData(
+    so,
+    vars = c(
+      var.clus,
+      unique(
+        d.mark[["name"]]
+      )
+    )
+  )
+
+  ### Heatmap annotation (average expression)
+  h.anno <- as.data.frame(
+    lapply(
+      h[,2:ncol(
+        h
+      )],
+      function(x)
+        mean(x)
+    )
+  )
+
+  ### Scale and plot average expression per cell type
+  h.in <- scale(
+    as.matrix(
+      magrittr::set_rownames(
+        setNames(
+          as.data.frame(
+            lapply(
+              h[,2:ncol(
+                h
+              )],
+              function(x)
+                dplyr::select(
+                  aggregate(
+                    x,
+                    list(
+                      h[,1]
+                    ),
+                    FUN = mean
+                  ),
+                  c(
+                    2
+                  )
+                )
+            )
+          ),
+          names(
+            h[,2:ncol(
+              h
+            )]
+          )
+        ),
+        levels(
+          h[,1]
+        )
+      )
+    ),
+    center = T
+  )
+
+  qs <- quantile(
+    h.in,
+    probs = c(
+      0.05,
+      0.95
+    )
+  )
+
+
+
+  fun.hm.col <- circlize::colorRamp2(
+    c(
+      qs[[1]],
+      (qs[[1]])/2,
+      (qs[[2]])/2,
+      qs[[2]]
+    ),
+    colors = Regio.col.grad()[c(
+      1,3,
+      6,12
+    )]
+  )
+
+  h.out <- ComplexHeatmap::Heatmap(
+    h.in,
+    col = fun.hm.col,
+    name = "Scaled Intensity",
+    top_annotation = ComplexHeatmap::HeatmapAnnotation(
+      `Average.Intensity` = ComplexHeatmap::anno_barplot(
+        as.vector(
+          t(
+            h.anno
+          )
+        ),
+        gp = grid::gpar(
+          fill = Regio.col.grad()
+        )
+      ),
+      annotation_name_gp = grid::gpar(
+        fontsize = 10
+      )
+    ),
+    show_column_names = T,
+    show_row_names = T,
+    heatmap_width = grid::unit(
+      h.w,"cm"
+    ),
+    heatmap_height = grid::unit(
+      h.h,"cm"
+    ),
+    column_title = paste("Marker Annotations (Top 5)","Sample",samp.no,sep = " "),
+    column_names_rot = 90,
+    column_names_gp = grid::gpar(
+      fontsize = fs.c
+    ),
+    row_names_side = "left",
+    row_names_gp = grid::gpar(
+      fontsize = fs.r
+    ),
+    cluster_columns = F,
+    cluster_rows = F
+  )
+
+  return(
+    h.out
+  )
+
+}

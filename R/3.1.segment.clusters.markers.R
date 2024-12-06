@@ -5,7 +5,6 @@
 #' used by Seurat.
 #'
 #' @param df A normalized data matrix.
-#' @param sample_no Sample ID number.
 #' @param md Number of metadata columns present in data matrix.
 #' @param span loess span parameter
 #' (proportion of pixels to fit model to;
@@ -16,311 +15,513 @@
 #' @return A Seurat object containing segmented clusters for a single sample.
 #' @examples
 #'
-#' # test <- msi_segment()
+#' # d_seg <- msi_segment(
+#' #   df = t(as.matrix(d_norm2[["data"]])),
+#' #   md = d_norm2[["pixels"]]
+#' # )
 #'
 #' @export
 msi_segment <- function(
   df,
-  sample_no,
   md,
   span = 0.1,
   clus_res = 0.9
 ) {
-
-  d.seg <- Seurat::CreateSeuratObject(
-    counts = t(
-      as.matrix(
-        d[
-          d[["ID"]] == sample.no,
-          (md + 1):ncol(d)
-        ]
-      )
-    ),
-    meta.data = d[
-      d[["ID"]] == sample.no,
-      1:md
-    ],
+  # Load data (ensure that features are rows and pixels are columns)
+  d <- df
+  mdf <- md
+  # Convert matrix into Seurat
+  dser <- Seurat::CreateSeuratObject(
+    counts = d,
+    meta.data = mdf,
     assay = "MSI"
   )
-
-  d.seg <- Seurat::NormalizeData(d.seg)
-
-  d.seg <- Seurat::FindVariableFeatures(
-    d.seg,
-    loess.span = span
-  )
-
-  Seurat::DefaultAssay(
-    object = d.seg
-  ) <- "MSI"
-
-  d <- Seurat::RunPCA(
+  # Log-transform, scale data, and perform batch corrections using Harmony
+  dser <- Seurat::NormalizeData(dser)
+  dser <- Seurat::FindVariableFeatures(dser, loess.span = 0.1)
+  dser <- Seurat::RunPCA(
     object = Seurat::ScaleData(
-      object = d.seg,
-      verbose = T
+      object = dser,
+      verbose = TRUE
     ),
-    verbose = T
+    verbose = TRUE
   )
-
-  d.seg <- MSI.PCA(d.seg)
-
-  d.seg <- Seurat::FindNeighbors(
-    d.seg,
-    dims = 1:10
+  Seurat::VizDimLoadings(
+    object = dser,
+    dims = 1:2,
+    reduction = "pca"
   )
-  d.seg <- Seurat::FindClusters(
-    d.seg,
-    resolution = clus.res,
-    n.iter = 25,
-    random.seed = 1234
+  Seurat::ElbowPlot(
+    dser,
+    reduction = "pca",
+    ndims = 50
   )
-
-  d.seg <- Seurat::AddMetaData(
-    d.seg,
-    metadata = as.factor(
-      as.numeric(
-        d.seg@meta.data$seurat_clusters
-      )
-    ),
-    col.name = "Cluster"
+  ## Run Harmony
+  dser <- harmony::RunHarmony(
+    dser,
+    assay.use = "MSI",
+    group.by.vars = "ID",
+    reduction.use = "pca",
+    reduction.save = "MSI.cor",
+    project.dim = FALSE
   )
-
-  return(d.seg)
-
+  ## Run UMAP
+  dser <- Seurat::RunUMAP(
+    dser,
+    reduction = "MSI.cor",
+    reduction.name = "umap.cor",
+    reduction.key = "umapcor_",
+    dims = 1:30,
+    n.components = 3
+  )
+  dser <- Seurat::FindNeighbors(dser, dims = 1:30)
+  dser <- Seurat::FindClusters(
+    dser, resolution = 0.9, n.iter = 25, random.seed = 1234
+  )
+  dser <- Seurat::AddMetaData(
+    dser,
+    metadata = as.factor(as.numeric(dser@meta.data$seurat_clusters)),
+    col.name = "cluster"
+  )
+  return(dser)
 }
 
-
-#' Top-5 Cluster Heatmap
+#' MSI UMAP
 #'
-#' Plots a heatmap of the top-5 compounds represented within each segmented cluster in a MSI Seurat object.
+#' Generates a panel of UMAPs given a
+#' Seurat object containing PCA and UMAP results.
 #'
-#' @param so Seurat object containing segmented MSI data.
-#' @param marks List of cluster marker compounds to use for subsetting Seurat object.
-#' @param var.clus Cluster variable.
-#' @param hm.w Heatmap width.
-#' @param hm.h Heatmap height.
-#' @param fs.c Heatmap column font size.
-#' @param fs.r Heatmap row font size.
-#' @param sample.no Sample ID number.
-#' @return A heatmap displaying the top-5 markers for each cluster.
+#' @param so A Seurat object.
+#' @param md_list A vector of character strings indicating
+#' metadata columns for overlaying on a loadings plot.
+#' @param slot1 A character string corresponding to the umap slot name to plot.
+#' @return A series of UMAPs with specified metadata overlays.
 #' @examples
-#' ## Change to lapply if not running on Linux or WSL2
-#' d.seg.mark <- setNames(
-#' parallel::mclapply(
-#'   mc.cores = ceiling(
-#'     parallel::detectCores()*
-#'       0.5
-#'   ),
-#'   seq.int(1,length(d.seg),1),
-#'   function(x){
-#'     # Find marker compounds for each calculated cluster
-#'     d.mark <- Seurat::FindAllMarkers(
-#'       d.seg[[x]],
-#'       test.use = "wilcox",
-#'       densify = T,
-#'       verbose = T
-#'     )
-#'     names(d.mark) <- c(
-#'       names(
-#'         d.mark[
-#'           ,
-#'           c(1:6)]
-#'       ),
-#'       "name"
-#'     )
-#'     d.mark[["ID"]] <- names(d.seg[x])
 #'
-#'     # Create top-5 heatmap
-#'     h.out <- MSI.markers.top5(
-#'       # Seurat object
-#'       d.seg[[x]],
-#'       # Marker gene list
-#'       d.mark,
-#'       # Cluster column
-#'       "Cluster",
-#'       # Heatmap width
-#'       24,
-#'       # Heatmap height
-#'       12,
-#'       # Column fontsize
-#'       6,
-#'       # Row fontsize
-#'       8,
-#'       # Sample number
-#'       x
-#'     )
-#'
-#'     return(
-#'       list(
-#'         "Markers" = d.mark,
-#'         "Plot" = h.out
-#'       )
-#'     )
-#'   }
-#' ),
-#' c(names(d.seg))
-#' )
+#' # p_umap <- msi_umap_panel(d_integrated,c("col1","col2","col3"),"wnn.umap")
 #'
 #' @export
-MSI.markers.top5 <- function(
-    so,
-    marks,
-    var.clus,
-    h.w,
-    h.h,
-    fs.c,
-    fs.r,
-    samp.no
+msi_umap_panel <- function(
+  so,
+  md_list,
+  slot1
 ) {
-  ### Load data
-  d.mark <- marks
-  d.mark[["cluster.no"]] <- d.mark[["cluster"]]
+  d <- so
+  if(ncol(d@reductions[[slot1]]@cell.embeddings) == 3) { #nolint
+    d2 <- data.frame(
+      d@meta.data,
+      `UMAP.1` = d@reductions[[slot1]]@cell.embeddings[, 1],
+      `UMAP.2` = d@reductions[[slot1]]@cell.embeddings[, 2],
+      `UMAP.3` = d@reductions[[slot1]]@cell.embeddings[, 3]
+    )
+    d2_list <- setNames(
+      lapply(
+        c(md_list),
+        function(x) {
+          d2[, c(
+            x,
+            "UMAP.1",
+            "UMAP.2",
+            "UMAP.3"
+          )
+          ]
+        }
+      ),
+      c(md_list)
+    )
 
-  ### Top 5 genes per cluster
-  d.mark <- dplyr::slice_max(
-    dplyr::group_by(
-      d.mark,
-      .data[["cluster.no"]]),
-    order_by = .data[["avg_log2FC"]],
-    n = 5
-  )[,c(
-    "name",
+  }
+  if(ncol(d@reductions[[slot1]]@cell.embeddings) == 2) { #nolint
+    d2 <- data.frame(
+      d@meta.data,
+      `UMAP.1` = d@reductions[[slot1]]@cell.embeddings[, 1],
+      `UMAP.2` = d@reductions[[slot1]]@cell.embeddings[, 2]
+    )
+    d2_list <- setNames(
+      lapply(
+        c(md_list),
+        function(x) {
+          d2[, c(
+            x,
+            "UMAP.1",
+            "UMAP.2"
+          )
+          ]
+        }
+      ),
+      c(md_list)
+    )
+  }
+  # Generate plots
+  d2_plot <- lapply(
+    c(md_list),
+    function(x) {
+      p <-  ggplot2::ggplot(
+        d2_list[[x]],
+        ggplot2::aes(
+          x=`UMAP.1`, # nolint
+          y=`UMAP.2`, # nolint
+          color = .data[[x]], # nolint
+          label = .data[[x]] # nolint
+        )
+      ) +
+        ggplot2::scale_color_manual(
+          paste(""),
+          values = col_univ() # nolint
+        ) +
+        # Add points
+        ggplot2::geom_point(
+          shape = 16,
+          size = 1,
+          alpha = 0.6
+        ) +
+        msi_theme1() + # nolint
+        ggplot2::theme(
+          panel.grid.major.y = ggplot2::element_blank(),
+          axis.text.x = ggplot2::element_blank(),
+          axis.text.y = ggplot2::element_blank(),
+          axis.title.x = ggplot2::element_blank(),
+          axis.title.y = ggplot2::element_blank(),
+          axis.ticks = ggplot2::element_blank(),
+          plot.margin = ggplot2::unit(
+            c(0.1, 0.1, 0.1, 0.1),
+            "cm"
+          ),
+          legend.position = c(
+            0.9,
+            0.85
+          )
+        )
+      return(p)
+    }
+  )
+  # Combine output
+  if(length(d2_plot) > 1) { # nolint
+    d2_out <- ggpubr::ggarrange(
+      plotlist = d2_plot,
+      labels = c(
+        names(
+          d2_plot
+        )
+      ),
+      ncol = ifelse(
+        length(
+          d2_plot
+        ) <= 3,
+        length(
+          d2_plot
+        ),
+        3
+      ),
+      nrow = ifelse(
+        length(
+          d2_plot
+        ) > 3,
+        ceiling(
+          length(
+            d2_plot
+          ) /
+            3
+        ),
+        1
+      )
+    )
+  }
+  if(length(d2_plot) == 1) { # nolint
+    d2_out <- d2_plot[[1]]
+  }
+  return(d2_out)
+}
+
+#' Top-10 Marker Gene Heatmap
+#'
+#' Generates a heatmap from a Seurat Object and
+#' marker gene list based on the top-10 marker genes for each cluster.
+#'
+#' @param so An object of class Seurat.
+#' @param asy Assay to use (ex. "RNA").
+#' @param cl_var Character string containing the name
+#' of the cluster variable for cell type predictions.
+#' @param h_w Numeric value for heatmap width (passed to ComplexHeatmap).
+#' @param h_h Numeric value for heatmap height (passed to ComplexHeatmap).
+#' @param fs_c Numeric value for column fontsize (passed to ComplexHeatmap).
+#' @param fs_r Numeric value for row fontsize (passed to ComplexHeatmap).
+#' @param cl_c Cluster columns?
+#' @param cl_r Cluster rows?
+#' @param rot_c Rotation of column names.
+#' @param col1 Gradient color scheme to use
+#' (must be exactly 4 colors in length).
+#' @return A ComplexHeatmap object containing a top-10 marker gene heatmap.
+#' @examples
+#'
+#' # p_umap <- sc_top10_marker_heatmap(
+#' #   d_annotated,
+#' #   "RNA",
+#' #   "seurat_clusters",
+#' #   18,
+#' #   24,
+#' #   6,
+#' #   8,
+#' #   TRUE,
+#' #   TRUE,
+#' #   col_grad()[c(3, 6, 9, 12)]
+#' # )
+#'
+#' @export
+sc_top10_marker_heatmap <- function(
+  so,
+  asy,
+  cl_var,
+  h_w,
+  h_h,
+  fs_c,
+  fs_r,
+  cl_c,
+  cl_r,
+  rot_c,
+  col1
+) {
+  d <- so
+  if(!file.exists("analysis/table.marker.genes.txt") && asy == "RNA") { # nolint
+    print(
+      "No marker gene file has been created;
+      calculating marker genes for each cluster..."
+    )
+    Seurat::DefaultAssay(d) <- "RNA"
+    cl_mark <- Seurat::FindAllMarkers(d, verbose = TRUE)
+    write.table(
+      cl_mark,
+      "analysis/table.marker.genes.txt",
+      col.names = TRUE,
+      row.names = FALSE,
+      sep = "\t"
+    )
+  }
+
+  if(!file.exists("analysis/table.marker.motifs.txt") && asy == "ATAC") { # nolint
+    print(
+      "No marker motif file has been created;
+      calculating marker motifs for each cluster..."
+    )
+    Seurat::DefaultAssay(d) <- "ATAC"
+    cl_mark <- Seurat::FindAllMarkers(
+      d,
+      min.pct = 0.05,
+      verbose = TRUE
+    )
+    names_motif <- data.frame(
+      "gene" = seq.int(1, nrow(d@assays$ATAC@meta.features), 1),
+      "near.gene" = paste(
+        d@assays$ATAC@meta.features[["nearestGene"]],
+        seq.int(1, nrow(d@assays$ATAC@meta.features), 1),
+        sep = "."
+      ),
+      "motif" = paste(
+        d@assays$ATAC@meta.features[["seqnames"]],
+        paste(
+          d@assays$ATAC@meta.features[["start"]],
+          d@assays$ATAC@meta.features[["end"]],
+          sep = "-"
+        ),
+        sep = ":"
+      )
+    )
+    cl_mark <- dplyr::left_join(
+      cl_mark,
+      names_motif,
+      by = "gene"
+    )
+    write.table(
+      cl_mark,
+      "analysis/table.marker.motifs.txt",
+      col.names = TRUE,
+      row.names = FALSE,
+      sep = "\t"
+    )
+  }
+
+  if(asy == "RNA") { # nolint
+    cl_mark <- read.table(
+      "analysis/table.marker.genes.txt",
+      sep = "\t",
+      header = TRUE
+    )
+  }
+
+  if(asy == "ATAC") { # nolint
+    cl_mark <- read.table(
+      "analysis/table.marker.motifs.txt",
+      sep = "\t",
+      header = TRUE
+    )
+  }
+  ## Marker gene input matrix (top10 per cell type)
+  if(class(cl_mark[["cluster"]]) == "character") { # nolint
+    cl_mark <- cl_mark[gtools::mixedorder(cl_mark[["cluster"]]), ]
+  }
+  cl_mark[["CellType.no"]] <- cl_mark[["cluster"]]
+
+  cl_mark <- dplyr::group_by(
+    cl_mark,
+    .data[["CellType.no"]] # nolint
+  )
+  ### Top 10 genes per cluster (by p value then by fold change)
+  cl_mark <- dplyr::slice_max(
+    cl_mark[cl_mark[["avg_log2FC"]] > 0, ],
+    order_by = -.data[["p_val_adj"]], # nolint
+    n = 25
+  )[, c(
+    "gene",
+    "cluster",
+    "avg_log2FC",
+    "p_val_adj"
+  )]
+
+  cl_mark <- dplyr::group_by(
+    cl_mark,
+    .data[["cluster"]] # nolint
+  )
+
+  cl_mark <- dplyr::slice_max(
+    cl_mark,
+    order_by = .data[["avg_log2FC"]], # nolint
+    n = 10
+  )[, c(
+    "gene",
     "cluster"
   )]
 
-
+  #### Save table
+  if(asy == "RNA") { # nolint
+    write.table(
+      cl_mark,
+      "analysis/table.marker.genes.top10.txt",
+      row.names = FALSE,
+      col.names = TRUE,
+      sep = "\t"
+    )
+    SeuratObject::DefaultAssay(d) <- "RNA"
+  }
+  if(asy == "ATAC") { # nolint
+    write.table(
+      cl_mark,
+      "analysis/table.marker.motifs.top10.txt",
+      row.names = FALSE,
+      col.names = TRUE,
+      sep = "\t"
+    )
+    SeuratObject::DefaultAssay(d) <- "ATAC"
+  }
   ### Subset seurat and scale
-  Seurat::DefaultAssay(so) <- "MSI"
-
-  h <- Seurat::FetchData(
-    so,
+  h <- SeuratObject::FetchData(
+    d,
     vars = c(
-      var.clus,
-      unique(
-        d.mark[["name"]]
-      )
+      cl_var,
+      unique(cl_mark[["gene"]])
     )
   )
-
   ### Heatmap annotation (average expression)
-  h.anno <- as.data.frame(
+  h_anno <- as.data.frame(
     lapply(
-      h[,2:ncol(
+      h[, 2:ncol(
         h
       )],
-      function(x)
+      function(x) {
         mean(x)
+      }
     )
   )
 
-  ### Scale and plot average expression per cell type
-  h.in <- scale(
+  h_anno <- h_anno[, h_anno[1, ] > 0]
+  ### Scale and plot average expression/accessibility per cell type
+  h_in <- scale(
     as.matrix(
       magrittr::set_rownames(
         setNames(
           as.data.frame(
             lapply(
-              h[,2:ncol(
+              h[, 2:ncol(
                 h
               )],
-              function(x)
+              function(x) {
                 dplyr::select(
                   aggregate(
                     x,
                     list(
-                      h[,1]
+                      h[, 1]
                     ),
                     FUN = mean
                   ),
-                  c(
-                    2
-                  )
+                  c(2)
                 )
+              }
             )
           ),
-          names(
-            h[,2:ncol(
-              h
-            )]
-          )
+          names(h[, 2:ncol(h)])
         ),
-        levels(
-          h[,1]
-        )
+        levels(h[, 1])
       )
     ),
-    center = T
+    center = TRUE
   )
-
   qs <- quantile(
-    h.in,
+    h_in,
     probs = c(
       0.05,
       0.95
-    )
+    ),
+    na.rm = TRUE
   )
 
+  h_in <- as.matrix(
+    as.data.frame(h_in)[, unlist(
+      lapply(
+        seq.int(1, ncol(as.data.frame(h_in)), 1),
+        function(x) {
+          !anyNA(as.data.frame(h_in)[x])
+        }
+      )
+    )
+    ]
+  )
 
-
-  fun.hm.col <- circlize::colorRamp2(
+  fun_hm_col <- circlize::colorRamp2(
     c(
       qs[[1]],
-      (qs[[1]])/2,
-      (qs[[2]])/2,
+      (qs[[1]]) / 2,
+      (qs[[2]]) / 2,
       qs[[2]]
     ),
-    colors = Regio.col.grad()[c(
-      1,3,
-      6,12
-    )]
+    colors = col1
   )
-
-  h.out <- ComplexHeatmap::Heatmap(
-    h.in,
-    col = fun.hm.col,
-    name = "Scaled Intensity",
+  # Create Plot
+  h_out <- ComplexHeatmap::Heatmap(
+    h_in,
+    col = fun_hm_col,
+    name = "Scaled Expression",
     top_annotation = ComplexHeatmap::HeatmapAnnotation(
-      `Average.Intensity` = ComplexHeatmap::anno_barplot(
-        as.vector(
-          t(
-            h.anno
-          )
-        ),
-        gp = grid::gpar(
-          fill = Regio.col.grad()
-        )
+      `Average.Expression` = ComplexHeatmap::anno_barplot(
+        as.vector(t(h_anno)),
+        gp = grid::gpar(fill = col1) # nolint
       ),
       annotation_name_gp = grid::gpar(
         fontsize = 10
       )
     ),
-    show_column_names = T,
-    show_row_names = T,
-    heatmap_width = grid::unit(
-      h.w,"cm"
-    ),
-    heatmap_height = grid::unit(
-      h.h,"cm"
-    ),
-    column_title = paste("Marker Annotations (Top 5)","Sample",samp.no,sep = " "),
-    column_names_rot = 90,
-    column_names_gp = grid::gpar(
-      fontsize = fs.c
-    ),
+    show_column_names = TRUE,
+    show_row_names = TRUE,
+    heatmap_width = ggplot2::unit(h_w, "cm"),
+    heatmap_height = ggplot2::unit(h_h, "cm"),
+    column_title = "Top 10 Markers",
+    column_names_rot = rot_c,
+    column_names_gp = grid::gpar(fontsize = fs_c),
     row_names_side = "left",
-    row_names_gp = grid::gpar(
-      fontsize = fs.r
-    ),
-    cluster_columns = F,
-    cluster_rows = F
+    row_names_gp = grid::gpar(fontsize = fs_r),
+    cluster_columns = cl_c,
+    cluster_rows = cl_r,
   )
-
-  return(
-    h.out
-  )
-
+  return(h_out)
 }
-
 
 #' Composite cluster images for all samples
 #'
