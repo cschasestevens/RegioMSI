@@ -4,12 +4,16 @@
 \alias{msi_segment}
 \title{Seurat-based KNN Clustering and Segmentation}
 \usage{
-msi_segment(df, md, span = 0.1, clus_res = 0.9)
+msi_segment(df, md, var_id, span = 0.1, clus_res = 0.9)
 }
 \arguments{
 \item{df}{A normalized data matrix.}
 
 \item{md}{Number of metadata columns present in data matrix.}
+
+\item{var_id}{Name of sample ID variable. If only one sample
+is present, then batch effect correction based on Harmony is
+excluded from the resulting image segmentation.}
 
 \item{span}{loess span parameter
 (proportion of pixels to fit model to;

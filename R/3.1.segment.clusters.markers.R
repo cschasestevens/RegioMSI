@@ -6,6 +6,9 @@
 #'
 #' @param df A normalized data matrix.
 #' @param md Number of metadata columns present in data matrix.
+#' @param var_id Name of sample ID variable. If only one sample
+#' is present, then batch effect correction based on Harmony is
+#' excluded from the resulting image segmentation.
 #' @param span loess span parameter
 #' (proportion of pixels to fit model to;
 #' use lower proportion for tissues with small regions).
@@ -24,59 +27,97 @@
 msi_segment <- function(
   df,
   md,
+  var_id,
   span = 0.1,
   clus_res = 0.9
 ) {
   # Load data (ensure that features are rows and pixels are columns)
   d <- df
   mdf <- md
-  # Convert matrix into Seurat
-  dser <- Seurat::CreateSeuratObject(
-    counts = d,
-    meta.data = mdf,
-    assay = "MSI"
-  )
-  # Log-transform, scale data, and perform batch corrections using Harmony
-  dser <- Seurat::NormalizeData(dser)
-  dser <- Seurat::FindVariableFeatures(dser, loess.span = 0.1)
-  dser <- Seurat::RunPCA(
-    object = Seurat::ScaleData(
-      object = dser,
+  if( # nolint
+    !file.exists(
+      paste(
+        "analysis/data.", lp1[["polarity"]], ".segmented.seurat.rds", sep = "" # nolint
+      )
+    )
+  ) {
+    # Convert matrix into Seurat
+    dser <- Seurat::CreateSeuratObject(
+      counts = d,
+      meta.data = mdf,
+      assay = "MSI"
+    )
+    head(dser@meta.data)
+    # Log-transform, scale data, and perform batch corrections using Harmony
+    dser <- Seurat::NormalizeData(dser)
+    dser <- Seurat::FindVariableFeatures(dser, loess.span = span)
+    dser <- Seurat::RunPCA(
+      object = Seurat::ScaleData(
+        object = dser,
+        verbose = TRUE
+      ),
       verbose = TRUE
-    ),
-    verbose = TRUE
-  )
-  Seurat::VizDimLoadings(
-    object = dser,
-    dims = 1:2,
-    reduction = "pca"
-  )
-  Seurat::ElbowPlot(
-    dser,
-    reduction = "pca",
-    ndims = 50
-  )
-  ## Run Harmony
-  dser <- harmony::RunHarmony(
-    dser,
-    assay.use = "MSI",
-    group.by.vars = "ID",
-    reduction.use = "pca",
-    reduction.save = "MSI.cor",
-    project.dim = FALSE
-  )
-  ## Run UMAP
-  dser <- Seurat::RunUMAP(
-    dser,
-    reduction = "MSI.cor",
-    reduction.name = "umap.cor",
-    reduction.key = "umapcor_",
-    dims = 1:30,
-    n.components = 3
-  )
-  dser <- Seurat::FindNeighbors(dser, dims = 1:30)
+    )
+    Seurat::VizDimLoadings(
+      object = dser,
+      dims = 1:2,
+      reduction = "pca"
+    )
+    Seurat::ElbowPlot(
+      dser,
+      reduction = "pca",
+      ndims = 50
+    )
+    ## Run Harmony
+    if(length(unique(as.character(mdf[[var_id]]))) == 1) { # nolint
+      print("Only one sample is present; skipping batch correction step...")
+      dser <- Seurat::RunUMAP(
+        dser,
+        reduction = "pca",
+        reduction.name = "umap",
+        reduction.key = "umap_",
+        dims = 1:30,
+        n.components = 3
+      )
+      dser <- Seurat::FindNeighbors(dser, dims = 1:30)
+    }
+    if(length(unique(as.character(mdf[[var_id]]))) > 1) { # nolint
+      dser <- harmony::RunHarmony(
+        dser,
+        assay.use = "MSI",
+        group.by.vars = "ID",
+        reduction.use = "pca",
+        reduction.save = "MSI.cor",
+        project.dim = FALSE
+      )
+      ## Run UMAP
+      dser <- Seurat::RunUMAP(
+        dser,
+        reduction = "MSI.cor",
+        reduction.name = "umap.cor",
+        reduction.key = "umapcor_",
+        dims = 1:30,
+        n.components = 3
+      )
+      dser <- Seurat::FindNeighbors(dser, dims = 1:30)
+    }
+  }
+  if( # nolint
+    file.exists(
+      paste(
+        "analysis/data.", lp1[["polarity"]], ".segmented.seurat.rds", sep = "" # nolint
+      )
+    )
+  ) {
+    print("A Seurat object already exists for this dataset; loading existing object...") # nolint
+    dser <- readRDS(
+      paste(
+        "analysis/data.", lp1[["polarity"]], ".segmented.seurat.rds", sep = "" # nolint
+      )
+    )
+  }
   dser <- Seurat::FindClusters(
-    dser, resolution = 0.9, n.iter = 25, random.seed = 1234
+    dser, resolution = clus_res, n.iter = 25, random.seed = 1234
   )
   dser <- Seurat::AddMetaData(
     dser,
@@ -233,15 +274,13 @@ msi_umap_panel <- function(
   return(d2_out)
 }
 
-#' Top-10 Marker Gene Heatmap
+#' Top-10 Feature Heatmap
 #'
-#' Generates a heatmap from a Seurat Object and
-#' marker gene list based on the top-10 marker genes for each cluster.
+#' Generates a heatmap from a Seurat Object containing
+#' clustered MSI data. By default, the top-10 features per
+#' cluster are returned.
 #'
-#' @param so An object of class Seurat.
-#' @param asy Assay to use (ex. "RNA").
-#' @param cl_var Character string containing the name
-#' of the cluster variable for cell type predictions.
+#' @param so A Seurat object.
 #' @param h_w Numeric value for heatmap width (passed to ComplexHeatmap).
 #' @param h_h Numeric value for heatmap height (passed to ComplexHeatmap).
 #' @param fs_c Numeric value for column fontsize (passed to ComplexHeatmap).
@@ -254,24 +293,21 @@ msi_umap_panel <- function(
 #' @return A ComplexHeatmap object containing a top-10 marker gene heatmap.
 #' @examples
 #'
-#' # p_umap <- sc_top10_marker_heatmap(
-#' #   d_annotated,
-#' #   "RNA",
-#' #   "seurat_clusters",
-#' #   18,
-#' #   24,
-#' #   6,
-#' #   8,
-#' #   TRUE,
-#' #   TRUE,
-#' #   col_grad()[c(3, 6, 9, 12)]
+#' # p_hmap_top <- msi_marker_heatmap(
+#' #   so = d_seg,
+#' #   h_w = 18,
+#' #   h_h = 24,
+#' #   fs_c = 6,
+#' #   fs_r = 8,
+#' #   cl_c = TRUE,
+#' #   cl_r = TRUE,
+#' #   rot_c = 45,
+#' #   col1 = col_grad()[c(3, 6, 9, 12)]
 #' # )
 #'
 #' @export
-sc_top10_marker_heatmap <- function(
+msi_marker_heatmap <- function(
   so,
-  asy,
-  cl_var,
   h_w,
   h_h,
   fs_c,
@@ -282,142 +318,80 @@ sc_top10_marker_heatmap <- function(
   col1
 ) {
   d <- so
-  if(!file.exists("analysis/table.marker.genes.txt") && asy == "RNA") { # nolint
+  if(!file.exists("analysis/table.marker.features.txt")) { # nolint
     print(
-      "No marker gene file has been created;
-      calculating marker genes for each cluster..."
+      "No marker feature file has been created;
+      calculating marker features for each cluster..."
     )
-    Seurat::DefaultAssay(d) <- "RNA"
-    cl_mark <- Seurat::FindAllMarkers(d, verbose = TRUE)
-    write.table(
-      cl_mark,
-      "analysis/table.marker.genes.txt",
-      col.names = TRUE,
-      row.names = FALSE,
-      sep = "\t"
-    )
-  }
-
-  if(!file.exists("analysis/table.marker.motifs.txt") && asy == "ATAC") { # nolint
-    print(
-      "No marker motif file has been created;
-      calculating marker motifs for each cluster..."
-    )
-    Seurat::DefaultAssay(d) <- "ATAC"
+    Seurat::DefaultAssay(d) <- "MSI"
     cl_mark <- Seurat::FindAllMarkers(
       d,
-      min.pct = 0.05,
+      test.use = "wilcox",
+      densify = TRUE,
       verbose = TRUE
-    )
-    names_motif <- data.frame(
-      "gene" = seq.int(1, nrow(d@assays$ATAC@meta.features), 1),
-      "near.gene" = paste(
-        d@assays$ATAC@meta.features[["nearestGene"]],
-        seq.int(1, nrow(d@assays$ATAC@meta.features), 1),
-        sep = "."
-      ),
-      "motif" = paste(
-        d@assays$ATAC@meta.features[["seqnames"]],
-        paste(
-          d@assays$ATAC@meta.features[["start"]],
-          d@assays$ATAC@meta.features[["end"]],
-          sep = "-"
-        ),
-        sep = ":"
-      )
-    )
-    cl_mark <- dplyr::left_join(
-      cl_mark,
-      names_motif,
-      by = "gene"
     )
     write.table(
       cl_mark,
-      "analysis/table.marker.motifs.txt",
+      "analysis/table.marker.features.txt",
       col.names = TRUE,
       row.names = FALSE,
       sep = "\t"
     )
   }
-
-  if(asy == "RNA") { # nolint
+  if(file.exists("analysis/table.marker.features.txt")) { # nolint
     cl_mark <- read.table(
-      "analysis/table.marker.genes.txt",
+      "analysis/table.marker.features.txt",
       sep = "\t",
       header = TRUE
     )
   }
-
-  if(asy == "ATAC") { # nolint
-    cl_mark <- read.table(
-      "analysis/table.marker.motifs.txt",
-      sep = "\t",
-      header = TRUE
-    )
-  }
-  ## Marker gene input matrix (top10 per cell type)
+  ## Marker feature input matrix (top10 per region)
   if(class(cl_mark[["cluster"]]) == "character") { # nolint
     cl_mark <- cl_mark[gtools::mixedorder(cl_mark[["cluster"]]), ]
   }
-  cl_mark[["CellType.no"]] <- cl_mark[["cluster"]]
-
+  cl_mark[["region"]] <- cl_mark[["cluster"]]
+  cl_mark[["feature"]] <- cl_mark[["gene"]]
   cl_mark <- dplyr::group_by(
     cl_mark,
-    .data[["CellType.no"]] # nolint
+    .data[["region"]] # nolint
   )
-  ### Top 10 genes per cluster (by p value then by fold change)
+  ### Top 10 features per cluster (by p value then by fold change)
   cl_mark <- dplyr::slice_max(
     cl_mark[cl_mark[["avg_log2FC"]] > 0, ],
     order_by = -.data[["p_val_adj"]], # nolint
     n = 25
   )[, c(
-    "gene",
+    "feature",
     "cluster",
     "avg_log2FC",
     "p_val_adj"
   )]
-
   cl_mark <- dplyr::group_by(
     cl_mark,
     .data[["cluster"]] # nolint
   )
-
   cl_mark <- dplyr::slice_max(
     cl_mark,
     order_by = .data[["avg_log2FC"]], # nolint
     n = 10
   )[, c(
-    "gene",
+    "feature",
     "cluster"
   )]
-
   #### Save table
-  if(asy == "RNA") { # nolint
-    write.table(
-      cl_mark,
-      "analysis/table.marker.genes.top10.txt",
-      row.names = FALSE,
-      col.names = TRUE,
-      sep = "\t"
-    )
-    SeuratObject::DefaultAssay(d) <- "RNA"
-  }
-  if(asy == "ATAC") { # nolint
-    write.table(
-      cl_mark,
-      "analysis/table.marker.motifs.top10.txt",
-      row.names = FALSE,
-      col.names = TRUE,
-      sep = "\t"
-    )
-    SeuratObject::DefaultAssay(d) <- "ATAC"
-  }
+  write.table(
+    cl_mark,
+    "analysis/table.marker.features.top10.txt",
+    row.names = FALSE,
+    col.names = TRUE,
+    sep = "\t"
+  )
   ### Subset seurat and scale
   h <- SeuratObject::FetchData(
     d,
     vars = c(
-      cl_var,
-      unique(cl_mark[["gene"]])
+      "cluster",
+      unique(cl_mark[["feature"]])
     )
   )
   ### Heatmap annotation (average expression)
@@ -433,7 +407,7 @@ sc_top10_marker_heatmap <- function(
   )
 
   h_anno <- h_anno[, h_anno[1, ] > 0]
-  ### Scale and plot average expression/accessibility per cell type
+  ### Scale and plot average intensity per region
   h_in <- scale(
     as.matrix(
       magrittr::set_rownames(
@@ -472,7 +446,6 @@ sc_top10_marker_heatmap <- function(
     ),
     na.rm = TRUE
   )
-
   h_in <- as.matrix(
     as.data.frame(h_in)[, unlist(
       lapply(
@@ -484,7 +457,6 @@ sc_top10_marker_heatmap <- function(
     )
     ]
   )
-
   fun_hm_col <- circlize::colorRamp2(
     c(
       qs[[1]],
@@ -498,9 +470,9 @@ sc_top10_marker_heatmap <- function(
   h_out <- ComplexHeatmap::Heatmap(
     h_in,
     col = fun_hm_col,
-    name = "Scaled Expression",
+    name = "Scaled Intensity",
     top_annotation = ComplexHeatmap::HeatmapAnnotation(
-      `Average.Expression` = ComplexHeatmap::anno_barplot(
+      `Average.Intensity` = ComplexHeatmap::anno_barplot(
         as.vector(t(h_anno)),
         gp = grid::gpar(fill = col1) # nolint
       ),
@@ -522,230 +494,3 @@ sc_top10_marker_heatmap <- function(
   )
   return(h_out)
 }
-
-#' Composite cluster images for all samples
-#'
-#' Visualizes combined cluster images for all samples. The input of this function requires a pre-existing normalized data matrix from
-#' the previous steps, which is merged with the corresponding cluster column from the segmented Seurat object and indexed by sample ID and
-#' pixel number.
-#'
-#' @param no Numeric sample ID.
-#' @param clus1 Name of clustering variable (most often this is 'Cluster').
-#' @return A panel of ion images stratified by sample ID for establishing distinct morphological regions in each sample.
-#' @examples
-#' # Add Seurat clustering column to image data frame and overwrite
-#' d <- dplyr::left_join(
-#'   dplyr::bind_rows(
-#'     lapply(
-#'       seq.int(1,length(d.seg),1),
-#'       function(x)
-#'         data.frame(
-#'           "pixel" = d[
-#'             d[["ID"]] == as.numeric(names(d.seg[x])),
-#'             "pixel"
-#'           ],
-#'           "Cluster" = as.factor(as.numeric(
-#'             d.seg[[x]]@meta.data[["seurat_clusters"]]
-#'           )
-#'           ))
-#'     )
-#'   ),
-#'   d,
-#'   by = "pixel"
-#' )
-#'
-#' d <- dplyr::left_join(
-#'   msi.pmd[
-#'     ,
-#'     c("pixel","X","Y")
-#'   ],
-#'   d,
-#'   by = "pixel"
-#' )
-#'
-#' # Plot cluster images for each sample
-#'
-#' d.seg.img <- setNames(
-#'   lapply(
-#'     seq.int(
-#'       1,
-#'       length(
-#'         unique(
-#'           d[,c("ID")]
-#'         )
-#'       ),
-#'       1
-#'     ),
-#'     function(x){
-#'       MSI.plot.AllClusters(
-#'         # input data
-#'         x,
-#'         # cluster column
-#'         "Cluster"
-#'       )
-#'     }
-#'   ),
-#'   c(
-#'     unique(
-#'       d[
-#'         ,
-#'         c("ID")
-#'       ]
-#'     )
-#'   )
-#' )
-#'
-#' @export
-MSI.plot.AllClusters <- function(no,clus1) {
-
-  ggplot2::ggplot() +
-    ggplot2::geom_raster(
-      data = d[d[["ID"]] == no,],
-      ggplot2::aes(
-        x = X,
-        y = Y,
-        fill = .data[[clus1]]
-      ),
-      interpolate = T
-    ) +
-    Regio.theme2() +
-    ggplot2::scale_y_reverse(
-      limits = c(
-        max(d[["Y"]]
-        ),
-        1
-      )
-    ) +
-    ggplot2::scale_x_continuous(
-      limits = c(
-        1,
-        max(d[["Y"]]
-        )
-      )
-    ) +
-    ggplot2::scale_fill_manual(
-      name = "Cluster",
-      values = Regio.col.univ()
-    )
-  }
-
-
-#' Individual cluster images for each sample
-#'
-#' Visualizes split cluster images for an individual sample. The input of this function requires a pre-existing normalized data matrix from
-#' the previous steps, which is merged with the corresponding cluster column from the segmented Seurat object and indexed by sample ID and
-#' pixel number.
-#'
-#' @param df Normalized data matrix containing cluster, sample ID, and pixel coordinate information.
-#' @param no.s Numeric sample ID.
-#' @param no.c Numeric cluster ID.
-#' @return A panel of ion images stratified by cluster ID for establishing distinct morphological regions in each sample.
-#' @examples
-#' # Split composite cluster images into individual clusters for validation
-#' d.seg.img.split <- setNames(
-#'   lapply(
-#'     seq.int(
-#'       1,
-#'       length(unique(d[,c("ID")])),
-#'       1
-#'     ),
-#'     function(x) {
-#'       setNames(
-#'         lapply(
-#'           seq.int(
-#'             1,
-#'             length(
-#'               unique(
-#'                 d[
-#'                   d[["ID"]] == x,
-#'                 ]
-#'                 [["Cluster"]]
-#'               )
-#'             ),
-#'             1
-#'           ),
-#'           function(y)
-#'             MSI.plot.IndClusters(
-#'               # Input data
-#'               d,
-#'               # Sample number
-#'               x,
-#'               # Cluster number
-#'               y
-#'             )
-#'         ),
-#'         c(
-#'           sort(
-#'             unique(
-#'               d[
-#'                 d[["ID"]] == x,
-#'               ]
-#'               [["Cluster"]]
-#'             )
-#'           )
-#'         )
-#'       )
-#'     }
-#'   ),
-#'   c(unique(
-#'     d[
-#'       ,
-#'       c("ID")
-#'     ]
-#'   )
-#'   )
-#' )
-#'
-#' @export
-MSI.plot.IndClusters <- function(df,no.s,no.c) {
-
-  ggplot2::ggplot() +
-    ggplot2::geom_raster(
-      data = df[df[["ID"]] == no.s,],
-      ggplot2::aes(
-        x = X,
-        y = Y,
-        fill = factor(
-          ifelse(
-            df[
-              df[["ID"]] == no.s,
-            ]
-            [["Cluster"]] == no.c,
-            no.c,
-            (0)
-          ),
-          levels = c(
-            no.c,
-            (0)
-          )
-        )
-      ),
-      interpolate = T
-    ) +
-    Regio.theme2() +
-    ggplot2::scale_y_reverse(
-      limits = c(
-        max(df[["Y"]]
-        ),
-        1
-      )
-    ) +
-    ggplot2::scale_x_continuous(
-      limits = c(
-        1,
-        max(df[["Y"]]
-        )
-      )
-    ) +
-    ggplot2::scale_fill_manual(
-      name = "Cluster",
-      values = c(Regio.col.univ()[[no.c]],"white")
-    )
-
-}
-
-
-
-
-
-

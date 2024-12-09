@@ -531,22 +531,36 @@ msi_plot_tic <- function(
     ggplot2::scale_y_continuous(limits = c(0, y_lim))
 }
 
-#' Ion Image QC
+#' Ion Images
 #'
 #' Plots the normalized pixel intensities as an ion image for each sample.
 #'
+#' @param ptype Type of ion image to plot. Currently supported image plot
+#' types are "intensity", "regions", or "coloc". Note that for "regions" or
+#' "coloc", region identities determined by Seurat clusters or
+#' an equivalent method must be present in the input data.
 #' @param df A normalized data matrix.
+#' @param dfmd Only used if ptype = "coloc". A pixel metadata matrix used for
+#' overlaying a specific region onto an ion image displaying signal intensity.
+#' Additionally, the input must contain the X and Y pixel coordinates for
+#' each image.
 #' @param var_y Variable corresponding to the pixel intensity for each sample.
 #' @param var_g Sample ID variable.
 #' @param perc_int Quantile to be used for the intensity color scale
 #' to improve contrast in ion images.
 #' @param spl_samp Plot a specific sample
 #' (default is to plot all sample images).
+#' @param spl_reg Should regions be split into separate images? Only used if
+#' spl_samp is TRUE and ptype is set to "regions."
 #' @param samp_no If spl_samp is TRUE, which sample number should be plotted?
+#' @param reg_var If ptype is "coloc", specify the region variable name.
+#' @param reg1 If ptype is "coloc," specify the name of the region to overlay
+#' with ion intensity.
 #' @return An ion image visualizing total normalized pixel intensities.
 #' @examples
 #'
 #' # ptic_img <- msi_plot_img(
+#' #   ptype = "intensity",
 #' #   df = d_norm[["pixels"]],
 #' #   var_y = "TIC.norm.tic",
 #' #   var_g = "ID",
@@ -555,33 +569,25 @@ msi_plot_tic <- function(
 #'
 #' @export
 msi_plot_img <- function(
+  ptype,
   df,
+  dfmd = NULL,
   var_y,
   var_g,
   perc_int,
   spl_samp = FALSE,
-  samp_no = NULL
+  spl_reg = FALSE,
+  samp_no = NULL,
+  reg_var = NULL,
+  reg1 = NULL
 ) {
   if(spl_samp == FALSE) { # nolint
     d1 <- df
-    d1[is.na(d1[[var_y]])] <- 0
-    p1 <- ggplot2::ggplot(
-      d1,
-      ggplot2::aes(
-        x = X, # nolint
-        y = Y # nolint
-      )
-    ) +
-      ggplot2::geom_raster(
-        ggplot2::aes(
-          fill = .data[[var_y]] # nolint
-        ),
-        interpolate = TRUE
-      ) +
-      msi_theme2() + # nolint
-      ggplot2::labs(fill = "Intensity") +
-      ggplot2::scale_y_reverse() +
-      ggplot2::scale_fill_gradientn(
+    d1[is.na(d1[[var_y]]), var_y] <- 0
+    vg1 <- var_g
+    d1[["group"]] <- vg1
+    if(ptype == "intensity") { # nolint
+      c1 <- ggplot2::scale_fill_gradientn(
         colors = col_grad(), # nolint
         limits = c(
           0,
@@ -591,32 +597,94 @@ msi_plot_img <- function(
           )
         ),
         na.value = col_grad()[[12]]
-      ) +
-      ggplot2::facet_wrap(
-        . ~ .data[[var_g]],
-        ncol = ceiling(length(unique(d1[[var_g]])) / 2)
       )
+    }
+    if(ptype == "regions" | ptype == "coloc") { # nolint
+      c1 <- ggplot2::scale_fill_manual(
+        name = "Region",
+        values = col_univ()
+      )
+    }
+    if(ptype == "coloc") { # nolint
+      comd <- dfmd
+    }
+    if(ptype == "coloc") { # nolint
+      p1 <- ggplot2::ggplot(
+        d1,
+        ggplot2::aes(
+          x = comd[["X"]], # nolint
+          y = comd[["Y"]] # nolint
+        )
+      ) +
+        ggplot2::geom_raster(
+          ggplot2::aes(
+            fill = .data[[var_y]] # nolint
+          ),
+          interpolate = TRUE
+        ) +
+        msi_theme2() + # nolint
+        ggplot2::labs(fill = "Intensity") +
+        ggplot2::scale_y_reverse() +
+        ggplot2::scale_fill_gradientn(
+          colors = col_grad(), # nolint
+          limits = c(
+            0,
+            quantile(
+              d1[[var_y]],
+              perc_int
+            )
+          ),
+          na.value = col_grad()[[12]]
+        ) +
+        ggnewscale::new_scale_fill() +
+        ggplot2::geom_raster(
+          data = comd,
+          ggplot2::aes(
+            fill = comd[[reg_var]]
+          ),
+          interpolate = TRUE,
+          show.legend = FALSE,
+          alpha = ifelse(
+            comd[[reg_var]] == reg1,
+            0.5,
+            0
+          )
+        ) +
+        ggplot2::facet_wrap(
+          . ~ d1[["group"]],
+          ncol = ceiling(length(unique(d1[["group"]])) / 2)
+        )
+    }
+    if(ptype != "coloc") { # nolint
+      p1 <- ggplot2::ggplot(
+        d1,
+        ggplot2::aes(
+          x = X, # nolint
+          y = Y # nolint
+        )
+      ) +
+        ggplot2::geom_raster(
+          ggplot2::aes(
+            fill = .data[[var_y]] # nolint
+          ),
+          interpolate = TRUE
+        ) +
+        msi_theme2() + # nolint
+        ggplot2::labs(fill = "Intensity") +
+        ggplot2::scale_y_reverse() +
+        c1 +
+        ggplot2::facet_wrap(
+          . ~ .data[["group"]],
+          ncol = ceiling(length(unique(d1[["group"]])) / 2)
+        )
+    }
   }
   if(spl_samp == TRUE) { # nolint
-    d1 <- df[df[[var_g]] == samp_no, ]
-    d1[is.na(d1[[var_y]])] <- 0
-    p1 <- ggplot2::ggplot(
-      d1,
-      ggplot2::aes(
-        x = X, # nolint
-        y = Y # nolint
-      )
-    ) +
-      ggplot2::geom_raster(
-        ggplot2::aes(
-          fill = .data[[var_y]] # nolint
-        ),
-        interpolate = TRUE
-      ) +
-      msi_theme2() + # nolint
-      ggplot2::labs(fill = "Intensity") +
-      ggplot2::scale_y_reverse() +
-      ggplot2::scale_fill_gradientn(
+    vg1 <- var_g
+    d1 <- df[vg1 == samp_no, ]
+    d1[is.na(d1[[var_y]]), var_y] <- 0
+    if(ptype == "intensity") { # nolint
+      c1 <- ggplot2::scale_fill_gradientn(
         colors = col_grad(), # nolint
         limits = c(
           0,
@@ -627,6 +695,106 @@ msi_plot_img <- function(
         ),
         na.value = col_grad()[[12]]
       )
+    }
+    if(ptype == "regions" | ptype == "coloc") { # nolint
+      c1 <- ggplot2::scale_fill_manual(
+        name = "Region",
+        values = col_univ()
+      )
+    }
+    if(spl_reg == FALSE) { # nolint
+      if(ptype == "coloc") { # nolint
+        comd <- dfmd[vg1 == samp_no, ]
+      }
+      if(ptype == "coloc") { # nolint
+        p1 <- ggplot2::ggplot(
+          d1,
+          ggplot2::aes(
+            x = comd[["X"]], # nolint
+            y = comd[["Y"]] # nolint
+          )
+        ) +
+          ggplot2::geom_raster(
+            ggplot2::aes(
+              fill = .data[[var_y]] # nolint
+            ),
+            interpolate = TRUE
+          ) +
+          msi_theme2() + # nolint
+          ggplot2::labs(fill = "Intensity") +
+          ggplot2::scale_y_reverse() +
+          ggplot2::scale_fill_gradientn(
+            colors = col_grad(), # nolint
+            limits = c(
+              0,
+              quantile(
+                d1[[var_y]],
+                perc_int
+              )
+            ),
+            na.value = col_grad()[[12]]
+          ) +
+          ggnewscale::new_scale_fill() +
+          ggplot2::geom_raster(
+            data = comd,
+            ggplot2::aes(
+              fill = comd[[reg_var]]
+            ),
+            interpolate = TRUE,
+            show.legend = FALSE,
+            alpha = ifelse(
+              comd[[reg_var]] == reg1,
+              0.5,
+              0
+            )
+          )
+      }
+      if(ptype != "coloc") { # nolint
+        p1 <- ggplot2::ggplot(
+          d1,
+          ggplot2::aes(
+            x = X, # nolint
+            y = Y # nolint
+          )
+        ) +
+          ggplot2::geom_raster(
+            ggplot2::aes(
+              fill = .data[[var_y]] # nolint
+            ),
+            interpolate = TRUE
+          ) +
+          msi_theme2() + # nolint
+          ggplot2::labs(fill = "Intensity") +
+          ggplot2::scale_y_reverse() +
+          c1
+      }
+    }
+    if(spl_reg == TRUE) { # nolint
+      p1 <- ggplot2::ggplot(
+        d1,
+        ggplot2::aes(
+          x = X, # nolint
+          y = Y # nolint
+        )
+      ) +
+        ggplot2::geom_raster(
+          ggplot2::aes(
+            fill = .data[[var_y]] # nolint
+          ),
+          interpolate = TRUE
+        ) +
+        msi_theme2() + # nolint
+        ggplot2::labs(fill = "Region") +
+        ggplot2::scale_y_reverse() +
+        c1 +
+        ggplot2::facet_wrap(
+          . ~ .data[[var_y]],
+          ncol = ceiling(length(unique(d1[[var_y]])) / 2)
+        ) +
+        ggplot2::theme(
+          strip.text = ggplot2::element_text(size = 10)
+        )
+    }
   }
   return(p1)
 }

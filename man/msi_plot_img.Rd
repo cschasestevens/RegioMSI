@@ -2,12 +2,34 @@
 % Please edit documentation in R/2.3b.normalize.sLOESS.R
 \name{msi_plot_img}
 \alias{msi_plot_img}
-\title{Ion Image QC}
+\title{Ion Images}
 \usage{
-msi_plot_img(df, var_y, var_g, perc_int, spl_samp = FALSE, samp_no = NULL)
+msi_plot_img(
+  ptype,
+  df,
+  dfmd = NULL,
+  var_y,
+  var_g,
+  perc_int,
+  spl_samp = FALSE,
+  spl_reg = FALSE,
+  samp_no = NULL,
+  reg_var = NULL,
+  reg1 = NULL
+)
 }
 \arguments{
+\item{ptype}{Type of ion image to plot. Currently supported image plot
+types are "intensity", "regions", or "coloc". Note that for "regions" or
+"coloc", region identities determined by Seurat clusters or
+an equivalent method must be present in the input data.}
+
 \item{df}{A normalized data matrix.}
+
+\item{dfmd}{Only used if ptype = "coloc". A pixel metadata matrix used for
+overlaying a specific region onto an ion image displaying signal intensity.
+Additionally, the input must contain the X and Y pixel coordinates for
+each image.}
 
 \item{var_y}{Variable corresponding to the pixel intensity for each sample.}
 
@@ -19,7 +41,15 @@ to improve contrast in ion images.}
 \item{spl_samp}{Plot a specific sample
 (default is to plot all sample images).}
 
+\item{spl_reg}{Should regions be split into separate images? Only used if
+spl_samp is TRUE and ptype is set to "regions."}
+
 \item{samp_no}{If spl_samp is TRUE, which sample number should be plotted?}
+
+\item{reg_var}{If ptype is "coloc", specify the region variable name.}
+
+\item{reg1}{If ptype is "coloc," specify the name of the region to overlay
+with ion intensity.}
 }
 \value{
 An ion image visualizing total normalized pixel intensities.
@@ -30,6 +60,7 @@ Plots the normalized pixel intensities as an ion image for each sample.
 \examples{
 
 # ptic_img <- msi_plot_img(
+#   ptype = "intensity",
 #   df = d_norm[["pixels"]],
 #   var_y = "TIC.norm.tic",
 #   var_g = "ID",
