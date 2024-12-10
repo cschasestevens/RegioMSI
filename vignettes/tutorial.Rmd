@@ -1,5 +1,5 @@
 ---
-title: "RegioMSI v1.1 tutorial"
+title: "RegioMSI v1.1 tutorial (Updated 20241210)"
 output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{tutorial}
@@ -21,7 +21,7 @@ knitr::opts_chunk$set(
 #### - Recommended hardware specs: Windows >10 with 128Gb of RAM OR Linux Ubuntu >22.04 with 128Gb of RAM
 
 ## 1.1. Installation of package and dependencies
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r inst, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 # Install devtools and BiocManager
 install.packages("devtools")
 install.packages("BiocManager")
@@ -46,7 +46,7 @@ BiocManager::install("Cardinal")
 
 ## 2.1. Data Import
 #### Loads all .imzML files from specified folder 
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r impt, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 library(RegioMSI)
 # Dataset input parameters
 lp1 <- msi_input_param(
@@ -64,7 +64,7 @@ names(d)
 
 ## 2.2. Processing: Peak Detection, Alignment, Binning, and Annotation
 #### Performs peak detection, alignment, binning, peak annotation, and assignment for all study samples. Detection and alignment are performed simultaneously to produce a single peak list for the entire dataset. Peaks from each sample are binned to the resulting reference list to convert data from profile to centroid and are used for downstream analyses. Peak annotations are optional but generally correspond to a list of compounds validated by LC-MS/MS.
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r proc, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 #---- Peak detection ----
 # Perform all peak processing;
 # Previous versions of Cardinal required
@@ -87,7 +87,6 @@ names(d2)
 # Requires:
 # - Processed peaks from previous step
 # - annotation text file for assigning annotations to peaks
-
 # Load annotation file (see example list for formatting help)
 an1 <- read.table(
   "ref/annotations.pos.txt",
@@ -130,7 +129,582 @@ Cardinal::spectra(
 
 ### Save data
 saveRDS(
-  d2a[["Data.filtered"]],
+  d2a,
   paste("analysis/data.", lp1[["polarity"]], ".processed.anno.rds", sep = "")
+)
+```
+
+## 2.3. Post-processing: Artifact Removal and Normalization
+#### Converts MSI experiment objects produced by Cardinal R to dense matrices after annotating peaks. This increases memory consumption but enables greater compatibility and faster calculation of normalization methods from other R packages. Two different normalization methods are tested in this script and compared to pre-normalized data, traditional total ion current (TIC) normalization and sparse locally estimated scatterplot smoothing (sLOESS) normalization. sLOESS is adapted from LOESS normalization in untargeted LC-MS/MS-based metabolomics assays and performs LOESS normalization for every non-zero intensity pixel in each image across multiple sample runs. This method addresses intra- and intersample signal drift in MSI experiments whereas TIC normalization in MSI is traditionally implemented on a per-sample basis and does not directly account for systematic variation in signal intensity.
+```{r norm, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+#---- Format MSImagingExperiment ----
+# Load processed data, annotation list, and metadata table (see example)
+names(d2a)
+Cardinal::imageData(d2a[["Data.original"]])
+## pixel metadata
+md1 <- read.table(
+  "ref/sample.metadata.pos.txt",
+  sep = "\t",
+  header = TRUE
+)
+## Format
+d_norm <- msi_norm_form(
+  ldp = d2a[["Data.original"]],
+  la = d2a[["All"]],
+  md = md1,
+  ftype = "all"
+)
+names(d_norm)
+head(d_norm[["Data"]])
+head(d_norm[["Feature"]])
+head(d_norm[["Pixel"]])
+
+#---- Artifact Removal ----
+# Calculate descriptive stats
+data_qc <- msi_data_qc(
+  dm = d_norm[["Data"]],
+  feat = d_norm[["Feature"]],
+  pix = d_norm[["Pixel"]],
+  parl = TRUE,
+  core_perc = 0.5
+)
+write.table(
+  data_qc,
+  paste("analysis/table.", lp1[["polarity"]], ".qc.all.txt", sep = ""),
+  sep = "\t",
+  col.names = TRUE,
+  row.names = FALSE
+)
+head(data_qc)
+
+# Check ion images
+plot_img_check <- setNames(
+  lapply(
+    seq.int(1, ncol(d_norm[["Data"]]), 1),
+    function(x) {
+      ptic_img <- msi_plot_img(
+        df = d_chk,
+        var_y = names(d_chk)[[x]],
+        var_g = "ID",
+        perc_int = 0.99
+      )
+      return(ptic_img)
+    }
+  ),
+  d_norm[["Feature"]][["Name"]]
+)
+parallel::mclapply(
+  mc.cores = 4,
+  seq.int(1, ncol(d_norm[["Data"]]), 1),
+  function(x) {
+    ggplot2::ggsave(
+      paste(
+        "analysis/1_check_img_artifact/plot_",
+        lp1[["polarity"]],
+        "_", x,
+        ".png",
+        sep = ""
+      ),
+      plot_img_check[[x]],
+      width = 6,
+      height = 12,
+      dpi = 300
+    )
+  }
+)
+
+# Remove flagged artifacts from downstream normalization
+d_norm[["Data"]] <- as.matrix(
+  as.data.frame(d_norm[["Data"]])[, data_qc[["artifact.flag"]] == FALSE]
+)
+ncol(d_norm[["Data"]])
+d_norm[["Feature"]] <- d_norm[["Feature"]][
+  data_qc[["artifact.flag"]] == FALSE,
+]
+nrow(d_norm[["Feature"]])
+#---- Perform Normalization ----
+names(d_norm)
+# For datasets with ~ 100 compounds or more, it is often necessary to
+# split normalization into batches
+ceiling(ncol(d_norm[["Data"]]) / 100)
+dl <- list(
+  "b1" = list(
+    d_norm[["Data"]][, 1:100],
+    d_norm[["Feature"]][1:100, ],
+    d_norm[["Pixel"]]
+  ),
+  "b2" = list(
+    d_norm[["Data"]][, 101:200],
+    d_norm[["Feature"]][101:200, ],
+    d_norm[["Pixel"]]
+  ),
+  "b3" = list(
+    d_norm[["Data"]][, 201:300],
+    d_norm[["Feature"]][201:300, ],
+    d_norm[["Pixel"]]
+  ),
+  "b4" = list(
+    d_norm[["Data"]][, 301:ncol(d_norm[["Data"]])],
+    d_norm[["Feature"]][301:nrow(d_norm[["Feature"]]), ],
+    d_norm[["Pixel"]]
+  )
+)
+# Normalize data
+# Repeat for each batch
+d_norm2_b4 <- msi_data_norm(
+  dm = dl[["b4"]][[1]],
+  feat = dl[["b4"]][[2]],
+  pix = dl[["b4"]][[3]],
+  mtd = "sLOESS",
+  parl = TRUE,
+  core_perc = 0.9
+)
+# Recombine batches or save data
+names(d_norm2_b1[["pixels"]])
+d_norm2 <- list(
+  "data" = setNames(dplyr::bind_cols(
+    d_norm2_b1[["data"]],
+    d_norm2_b2[["data"]],
+    d_norm2_b3[["data"]],
+    d_norm2_b4[["data"]]
+  ), paste(
+    rep("X", ncol(d_norm[["Data"]])),
+    seq.int(1, ncol(d_norm[["Data"]])),
+    sep = "."
+  )),
+  "features" = dplyr::bind_rows(
+    d_norm2_b1[["features"]],
+    d_norm2_b2[["features"]],
+    d_norm2_b3[["features"]],
+    d_norm2_b4[["features"]]
+  ),
+  "pixels" = d_norm2_b1[["pixels"]][, -c(8)],
+  "norm.method" = "sLOESS"
+)
+## Recalculate TIC for QC
+d_norm2[["pixels"]][["TIC.norm.sloess"]] <- unlist(parallel::mclapply(
+  mc.cores = parallel::detectCores() * 0.9,
+  seq.int(1, ncol(t(as.matrix(d_norm2[["data"]]))), 1),
+  function(x) sum(d_norm2[["data"]][x, ])
+))
+names(d_norm2)
+head(d_norm2[["pixels"]])
+## Save
+saveRDS(
+  d_norm2,
+  paste("analysis/data.", lp1[["polarity"]], ".norm.sloess.all.rds", sep = "")
+)
+
+#---- Compare Normalization Methods ----
+# Load normalization methods as list
+dl_norm <- list(
+  "none" = readRDS("analysis/data.pos.norm.none.rds"),
+  "tic" = readRDS("analysis/data.pos.norm.tic.rds"),
+  "rms" = readRDS("analysis/data.pos.norm.rms.rds"),
+  "sloess" = readRDS("analysis/data.pos.norm.sloess.rds")
+)
+# Combine pixel metadata
+mdpx <- setNames(
+  data.frame(
+    dl_norm[[1]][["pixels"]],
+    as.data.frame(
+      lapply(
+        seq.int(2, length(dl_norm), 1),
+        function(x) {
+          dl_norm[[x]][["pixels"]][, c(ncol(dl_norm[[x]][["pixels"]]))]
+        }
+      )
+    )
+  ),
+  c(
+    names(dl_norm[[1]][["pixels"]]),
+    unlist(
+      lapply(
+        seq.int(2, length(dl_norm), 1),
+        function(x) {
+          names(dl_norm[[x]][["pixels"]])[ncol(dl_norm[[x]][["pixels"]])]
+        }
+      )
+    )
+  )
+)
+
+# Calculate RSD between samples
+names(mdpx)
+mdpx[is.nan(mdpx[["TIC.norm.rms"]]), "TIC.norm.rms"] <- 0
+setNames(
+  lapply(
+    seq.int(1, 4, 1),
+    function(x) {
+      round((sd(mdpx[, 7 + x]) / mean(mdpx[, 7 + x])) * 100, digits = 2)
+    }
+  ),
+  names(dl_norm)
+)
+
+# TIC comparison
+## Use lapply if on Windows
+names(mdpx)
+plot_tic <- setNames(
+  parallel::mclapply(
+    mc.cores = 4,
+    seq.int(1, 4, 1),
+    function(x) {
+      ptic <- msi_plot_tic(
+        df = mdpx,
+        var_x = "pixel",
+        var_y = names(mdpx)[7 + x],
+        var_g = "ID",
+        y_lim = 100000
+      )
+      return(ptic)
+    }
+  ),
+  c(names(dl_norm))
+)
+
+ggplot2::ggsave(
+  paste("analysis/plot.", lp1[["polarity"]], ".tic.compare.png", sep = ""),
+  ggpubr::ggarrange(
+    plotlist = plot_tic,
+    nrow = 1,
+    labels = names(dl_norm),
+    common.legend = TRUE
+  ),
+  width = 24,
+  height = 6,
+  dpi = 800
+)
+
+## Plot ion images
+class(d_norm2[["pixels"]])
+plot_tic_img <- setNames(
+  parallel::mclapply(
+    mc.cores = 4,
+    seq.int(1, 4, 1),
+    function(x) {
+      ptic_img <- msi_plot_img(
+        df = mdpx,
+        var_y = names(mdpx)[7 + x],
+        var_g = "ID",
+        perc_int = 0.99
+      )
+      return(ptic_img)
+    }
+  ),
+  c(names(dl_norm))
+)
+
+ggplot2::ggsave(
+  paste(
+    "analysis/plot.", lp1[["polarity"]], ".tic.compare.img.none.png", sep = ""
+  ),
+  plot_tic_img[["none"]],
+  width = 6,
+  height = 12,
+  dpi = 800
+)
+```
+
+# 3.1. Image Segmentation, Clustering, and Region Assignment
+#### Implements the scRNA-Seq clustering approach used by the R package Seurat to perform segmentation analysis and clustering of MSI data. Briefly, Seurat utilizes a K-nearest neighbor graph to partition all data points into individual 'communities' and evaluates overlapping communities based on their Jaccard similarity scores. This algorithm uses annotated compounds as input and therefore reduces bias introduced by technical artifacts and dramatically reduces the time necessary to generate segmented images. Furthermore, this method reliably partitions regions in tissue types with highly heterogenous morphology (e.g. lung tissue).
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+#---- Image Segmentation ----
+# Segment based on all features after artifact removal
+# Either perform segmentation for all samples or individually
+## For all samples
+d_seg1 <- msi_segment(
+  df = t(as.matrix(d_norm2[["data"]])),
+  md = d_norm2[["pixels"]],
+  var_id = "ID",
+  clus_res = 0.8
+)
+## For each sample (use lapply if on Windows)
+l_seg <- setNames(
+  parallel::mclapply(
+    mc.cores = 2,
+    seq.int(1, length(unique(as.character(d_norm2[["pixels"]][["ID"]]))), 1),
+    function(x) {
+      s1 <- msi_segment(
+        df = t(
+          as.matrix(d_norm2[["data"]][d_norm2[["pixels"]][["ID"]] == x, ])
+        ),
+        md = d_norm2[["pixels"]][d_norm2[["pixels"]][["ID"]] == x, ],
+        var_id = "ID",
+        clus_res = 0.9
+      )
+      return(s1)
+    }
+  ),
+  paste(
+    rep("sample.",
+      length(unique(as.character(d_norm2[["pixels"]][["ID"]])))
+    ),
+    unique(as.character(d_norm2[["pixels"]][["ID"]])),
+    sep = ""
+  )
+)
+## Save
+saveRDS(
+  l_seg,
+  paste(
+    "analysis/data.", lp1[["polarity"]], ".segmented.seurat.list.rds", sep = ""
+  )
+)
+## Visualize Clusters
+ggplot2::ggsave(
+  "analysis/plot.umap.panel.samp2.png",
+  msi_umap_panel( # nolint
+    l_seg[[2]],
+    c("ID", "Group", "cluster"),
+    "umap"
+  ),
+  height = 8,
+  width = 24,
+  dpi = 600
+)
+
+#---- Find marker compounds for each cluster ----
+p_hmap_top <- msi_marker_heatmap(
+  so = l_seg[[2]],
+  h_w = 32,
+  h_h = 16,
+  fs_c = 6,
+  fs_r = 8,
+  cl_c = TRUE,
+  cl_r = TRUE,
+  rot_c = 45,
+  col1 = col_grad()[c(3, 6, 9, 12)]
+)
+png(
+  paste(
+    "analysis/plot.",
+    lp1[["polarity"]],
+    ".heatmap.top.features.samp2.png",
+    sep = ""
+  ),
+  width = 36,
+  height = 18,
+  units = "cm",
+  res = 1000
+)
+print(p_hmap_top)
+dev.off()
+
+#---- Plot clusters ----
+# Add Seurat clustering column to image data frame for each sample and overwrite
+col_reg <- data.frame(
+  "ID" = unlist(lapply(
+    seq.int(1, length(l_seg), 1),
+    function(x) l_seg[[x]]@meta.data[["ID"]]
+  )),
+  "pixel" = unlist(lapply(
+    seq.int(1, length(l_seg), 1),
+    function(x) l_seg[[x]]@meta.data[["pixel"]]
+  )),
+  "cluster" = unlist(lapply(
+    seq.int(1, length(l_seg), 1),
+    function(x) l_seg[[x]]@meta.data[["cluster"]]
+  ))
+)
+d_seg <- list(
+  "data" = d_norm2[["data"]],
+  "features" = d_norm2[["features"]],
+  "pixels" = dplyr::left_join(
+    d_norm2[["pixels"]],
+    col_reg[, c("pixel", "cluster")],
+    by = "pixel"
+  ),
+  "norm.method" = "sLOESS"
+)
+# Save
+saveRDS(
+  d_seg,
+  paste(
+    "analysis/data.", lp1[["polarity"]], ".segmented.rds", sep = ""
+  )
+)
+
+# Plot clusters
+## (either all samples, individual sample, or all clusters for one sample)
+names(d_seg[["pixels"]])
+p_reg_img <- msi_plot_img(
+  ptype = "regions",
+  df = d_seg[["pixels"]],
+  var_y = "cluster",
+  var_g = "ID",
+  perc_int = 0.95,
+  spl_samp = TRUE,
+  spl_reg = TRUE,
+  samp_no = 1
+)
+ggplot2::ggsave(
+  paste(
+    "analysis/img.", lp1[["polarity"]], ".clusters.spl.samp1.png", sep = ""
+  ),
+  p_reg_img,
+  width = 18,
+  height = 6,
+  dpi = 800
+)
+
+# Add annotated regions to data
+d_seg[["pixels"]][["region"]] <- ifelse(
+  d_seg[["pixels"]][["ID"]] == 1 & d_seg[["pixels"]][["cluster"]] == 9 |
+    d_seg[["pixels"]][["ID"]] == 2 & d_seg[["pixels"]][["cluster"]] == 14,
+  "airway.epithelium",
+  d_seg[["pixels"]][["cluster"]]
+)
+unique(d_seg[["pixels"]][, c("ID", "region")])
+## Overwrite segmented data with region assignments
+saveRDS(
+  d_seg,
+  paste(
+    "analysis/data.", lp1[["polarity"]], ".segmented.rds", sep = ""
+  )
+)
+```
+
+# 3.2. Colocalization to specific region
+#### Plots ion images with cluster overlays to determine compound localization to a specific region.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+# Plot ion images with region overlay
+coloc1 <- msi_plot_img(
+  ptype = "coloc",
+  df = d_seg[["data"]],
+  dfmd = d_seg[["pixels"]],
+  var_y = "X.6",
+  var_g = d_seg[["pixels"]][["ID"]],
+  perc_int = 0.95,
+  reg_var = "region",
+  reg1 = "airway.epithelium"
+)
+
+ggplot2::ggsave(
+  paste(
+    "analysis/img.", lp1[["polarity"]], ".clusters.coloc.reg1.png", sep = ""
+  ),
+  coloc1,
+  width = 6,
+  height = 12,
+  dpi = 800
+)
+```
+
+# 4.1. Statistical Analysis
+#### Statistical methods for comparing compound intensities between samples, regions, or a combination of variables.
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+# Load data
+d_seg <- readRDS("analysis/manu/d.neg.seg.rds")
+
+# Count pixels per group
+cnt_pix <- msi_cnt_pix(
+  mdf = d_seg[["pixels"]],
+  var_sel = c("Group", "ID", "Cluster")
+)
+head(cnt_pix)
+
+# Log-transform and scale data for statistical analysis
+d_seg[["scale.data"]] <- msi_data_check()
+head(d_seg[["scale.data"]][["data"]][["data.pareto"]])
+# Conduct either one-way or multivariate ANOVA for
+# segmented MSI dataset
+## Subset/aggregate data beforehand if comparing individual regions
+## within samples
+head(d_seg[["pixels"]])
+d_stat <- msi_stat_anova(md_var = c("Group"))
+head(d_stat)
+
+## Repeat with aggregated pixels (compare treatment group means)
+## Add or remove variables as needed
+## use lapply if using Windows
+d_seg2 <- list(
+  "data.pareto" = purrr::reduce(
+    parallel::mclapply(
+      mc.cores = 12,
+      seq.int(1, ncol(d_seg[["data"]])),
+      function(x) {
+        setNames(aggregate(
+          d_seg[["scale.data"]][["data"]][["data.pareto"]][[x]],
+          list(d_seg[["pixels"]][, "ID"]),
+          function(y) mean(y)
+        ), c("ID", d_seg[["features"]][x, "Name"]))
+      }
+    ),
+    dplyr::left_join,
+    by = "ID"
+  )[, -1],
+  "data" = purrr::reduce(
+    parallel::mclapply(
+      mc.cores = 12,
+      seq.int(1, ncol(d_seg[["data"]])),
+      function(x) {
+        setNames(aggregate(
+          d_seg[["data"]][[x]],
+          list(d_seg[["pixels"]][, "ID"]),
+          function(y) mean(y)
+        ), c("ID", d_seg[["features"]][x, "Name"]))
+      }
+    ),
+    dplyr::left_join,
+    by = "ID"
+  )[, -1],
+  "features" = d_seg[["features"]],
+  "pixels" = unique(d_seg[["pixels"]][, c("Group", "ID")]),
+  "norm.method" = "sLOESS"
+)
+d_stat <- msi_stat_anova(
+  matpv = d_seg2[["data.pareto"]],
+  matfc = d_seg2[["data"]],
+  md = d_seg2[["pixels"]],
+  md_var = c("Group"),
+  an = d_seg2[["features"]]
+)
+head(d_stat)
+
+# Plot statistical results as a volcano plot
+p_vol <- msi_plot_volcano(
+  d_stat = d_stat,
+  comp_name = "F.SFA-F.HO3",
+  f_cut = 0.25,
+  f_lim = 6,
+  y_limit = 10,
+  x_title = "x-axis title"
+)
+ggplot2::ggsave(
+  paste(
+    "analysis/plot.", lp1[["polarity"]], ".vol.fsfa.vs.fho3.png", sep = ""
+  ),
+  p_vol,
+  width = 10,
+  height = 10,
+  dpi = 800
+)
+```
+
+# 4.2. ChemRICH
+#### Conducts ChemRICH analysis for each comparison in a provided result generated by msi_stat_anova() (default) or from a single ChemRICH input (in development).
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+# Run ChemRICH
+d_enr <- msi_stat_crich(
+  d_stat = d_stat,
+  d_ref = d_seg2[["features"]],
+  cl_name = "label.saturation"
+)
+head(d_enr)
+# Plot
+unique(d_enr[["Comparison"]])
+p_enr <- msi_plot_crich(
+  dfcr = d_enr[d_enr[["Comparison"]] == "M.SFA-M.HO3", ],
+  cl_name = "label.saturation"
+)
+ggplot2::ggsave(
+  paste(
+    "analysis/plot.", lp1[["polarity"]], ".chemrich.msfa.vs.mho3.png", sep = ""
+  ),
+  p_enr,
+  width = 10,
+  height = 10,
+  dpi = 800
 )
 ```
