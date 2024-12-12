@@ -7,7 +7,6 @@
 #' @param dm A MSI data matrix.
 #' @param feat A data frame containing metadata for each annotated compound.
 #' @param pix A data frame containing sample metadata for each pixel
-#' @param mtd Normalization method (either "none", "tic", "rms", or "sLOESS").
 #' @param parl (optional) Logical indicating if normalization
 #' should be performed in parallel.
 #' @param core_perc (optional) Percentage of cores to use for parallel

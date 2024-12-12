@@ -66,10 +66,7 @@ names(d)
 #### Performs peak detection, alignment, binning, peak annotation, and assignment for all study samples. Detection and alignment are performed simultaneously to produce a single peak list for the entire dataset. Peaks from each sample are binned to the resulting reference list to convert data from profile to centroid and are used for downstream analyses. Peak annotations are optional but generally correspond to a list of compounds validated by LC-MS/MS.
 ```{r proc, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 #---- Peak detection ----
-# Perform all peak processing;
-# Previous versions of Cardinal required
-# a separate peak binning step, which is
-# no longer applicable in newer versions
+# Perform all peak processing
 d2 <- msi_peak_proc(
   ld = d[["Data.files"]],
   lp = lp1,

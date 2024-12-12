@@ -18,8 +18,6 @@ should be performed in parallel.}
 
 \item{core_perc}{(optional) Percentage of cores to use for parallel
 normalization.}
-
-\item{mtd}{Normalization method (either "none", "tic", "rms", or "sLOESS").}
 }
 \value{
 A list containing normalized pixel intensities and metadata.
