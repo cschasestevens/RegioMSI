@@ -10,7 +10,9 @@ vignette: >
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  fig.width = 6,
+  fig.height = 4
 )
 ```
 
@@ -22,7 +24,7 @@ knitr::opts_chunk$set(
 #### - Use parallel::mclapply and set core number to run compatible functions in parallel (not covered by this tutorial but examples can be found in package documentation)
 
 ## 1.1. Installation of package and dependencies
-```{r inst, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r inst, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F, out.width = "75%"}
 # Install devtools and BiocManager
 install.packages("devtools")
 install.packages("BiocManager")
@@ -47,7 +49,7 @@ BiocManager::install("Cardinal")
 
 ## 2.1. Data Import
 #### Loads all .imzML files from specified folder 
-```{r impt, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r impt, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T, out.width = "75%"}
 library(RegioMSI)
 # Dataset input parameters (replace with local file location)
 # Use msi_load_data() to load all samples present in the chosen directory
@@ -64,7 +66,7 @@ data("md1", package = "RegioMSI")
 
 ## 2.2. Processing: Peak Detection, Alignment, Binning, and Annotation
 #### Performs peak detection, alignment, binning, peak annotation, and assignment for all study samples. Detection and alignment are performed simultaneously to produce a single peak list for the entire dataset. Peaks from each sample are binned to the resulting reference list to convert data from profile to centroid and are used for downstream analyses. Peak annotations are optional but generally correspond to a list of compounds validated by LC-MS/MS.
-```{r proc, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r proc, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F, out.width = "75%"}
 #---- Peak detection ----
 # Perform all peak processing;
 # Previous versions of Cardinal required
@@ -103,7 +105,7 @@ d2a[["Data.filtered"]]
 
 ## 2.3. Post-processing: Artifact Removal and Normalization
 #### Converts MSI experiment objects produced by Cardinal R to dense matrices after annotating peaks. This increases memory consumption but enables greater compatibility and faster calculation of normalization methods from other R packages. Two different normalization methods are tested in this script and compared to pre-normalized data, traditional total ion current (TIC) normalization and sparse locally estimated scatterplot smoothing (sLOESS) normalization. sLOESS is adapted from LOESS normalization in untargeted LC-MS/MS-based metabolomics assays and performs LOESS normalization for every non-zero intensity pixel in each image across multiple sample runs. This method addresses intra- and intersample signal drift in MSI experiments whereas TIC normalization in MSI is traditionally implemented on a per-sample basis and does not directly account for systematic variation in signal intensity.
-```{r norm, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r norm, echo=T, fig.align= "center", results=T, message=F, warning=T, eval=T, out.width = "75%"}
 #---- Format MSImagingExperiment ----
 # Load processed data, annotation list, and metadata table (see example)
 ## Format
@@ -195,12 +197,10 @@ ptic_img
 
 # 3.1. Image Segmentation, Clustering, and Region Assignment
 #### Implements the scRNA-Seq clustering approach used by the R package Seurat to perform segmentation analysis and clustering of MSI data. Briefly, Seurat utilizes a K-nearest neighbor graph to partition all data points into individual 'communities' and evaluates overlapping communities based on their Jaccard similarity scores. This algorithm uses annotated compounds as input and therefore reduces bias introduced by technical artifacts and dramatically reduces the time necessary to generate segmented images. Furthermore, this method reliably partitions regions in tissue types with highly heterogenous morphology (e.g. lung tissue).
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r, echo=T, fig.align= "center", results=T, message=F, warning=F, eval=T, out.width = "75%"}
 #---- Image Segmentation ----
 # Segment based on all features after artifact removal
 # Either perform segmentation for all samples or individually
-## For all samples
-d_norm2[["data"]]
 ## For each sample (use lapply if on Windows)
 l_seg <- setNames(
   lapply(
@@ -244,7 +244,6 @@ p_hmap_top <- msi_marker_heatmap(
   rot_c = 45,
   col1 = col_grad()[c(3, 6, 9, 12)]
 )
-p_hmap_top[["markers"]]
 p_hmap_top[["plot"]]
 
 #---- Plot clusters ----
@@ -301,13 +300,12 @@ unique(d_seg[["pixels"]][, c("ID", "region")])
 
 # 3.2. Colocalization to specific region
 #### Plots ion images with cluster overlays to determine compound localization to a specific region.
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=F, eval=T, out.width = "75%"}
 # Plot ion images with region overlay
 d_seg[["data"]] <- setNames(
   as.data.frame(d_seg[["data"]]),
   paste("X", seq.int(1, ncol(d_seg[["data"]]), 1), sep = ".")
 )
-d_seg[["data"]]
 coloc1 <- msi_plot_img(
   ptype = "coloc",
   df = d_seg[["data"]],
@@ -323,7 +321,7 @@ coloc1
 
 # 4.1. Statistical Analysis
 #### Statistical methods for comparing compound intensities between samples, regions, or a combination of variables.
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=F, eval=T, out.width = "75%"}
 # Count pixels per group
 cnt_pix <- msi_cnt_pix(
   mdf = d_seg[["pixels"]],
@@ -402,7 +400,7 @@ p_vol
 
 # 4.2. ChemRICH
 #### Conducts ChemRICH analysis for each comparison in a provided result generated by msi_stat_anova() (default) or from a single ChemRICH input (in development).
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r, echo=T, fig.align= "center", results=T, message=F, warning=F, eval=T, out.width = "75%"}
 # Run ChemRICH
 ## IMPORTANT: only works for datasets with annotated compounds
 d_seg2[["features"]][["label.test"]] <- ifelse(
