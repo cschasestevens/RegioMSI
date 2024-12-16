@@ -357,8 +357,8 @@ head(d_seg[["scale.data"]][["data"]][["data.pareto"]])
 ## Subset/aggregate data beforehand if comparing individual regions
 ## within samples
 head(d_seg[["pixels"]])
-d_stat <- msi_stat_anova(md_var = c("Group"))
-head(d_stat)
+d_stat1 <- msi_stat_anova(md_var = c("Group"))
+head(d_stat1)
 
 ## Repeat with aggregated pixels (compare treatment group means)
 ## Add or remove variables as needed
@@ -410,22 +410,14 @@ head(d_stat)
 
 # Plot statistical results as a volcano plot
 p_vol <- msi_plot_volcano(
-  d_stat = d_stat,
-  comp_name = "F.SFA-F.HO3",
+  d_stat = d_stat1,
+  comp_name = "M.SFA-M.HO3",
   f_cut = 0.25,
   f_lim = 6,
   y_limit = 10,
   x_title = "x-axis title"
 )
-ggplot2::ggsave(
-  paste(
-    "analysis/plot.", lp1[["polarity"]], ".vol.fsfa.vs.fho3.png", sep = ""
-  ),
-  p_vol,
-  width = 10,
-  height = 10,
-  dpi = 800
-)
+p_vol
 ```
 
 # 4.2. ChemRICH
@@ -433,7 +425,7 @@ ggplot2::ggsave(
 ```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 # Run ChemRICH
 d_enr <- msi_stat_crich(
-  d_stat = d_stat,
+  d_stat = d_stat1,
   d_ref = d_seg2[["features"]],
   cl_name = "label.saturation"
 )
