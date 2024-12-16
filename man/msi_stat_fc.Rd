@@ -12,6 +12,7 @@ msi_stat_fc(
   an_name = "Name",
   fc_class = FALSE,
   grp_class = NULL,
+  parl = FALSE,
   core_perc = 0.75
 )
 }
@@ -32,6 +33,8 @@ fold changes should be calculated. Requires MSI feature metadata if TRUE.}
 
 \item{grp_class}{Name of the class annotation column
 to use. Ignored when fc_class is FALSE.}
+
+\item{parl}{Should stats be run in parallel?}
 
 \item{core_perc}{Not used on Windows; Proportion of cores to use for
 conducting statistical analysis in parallel.}

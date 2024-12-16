@@ -14,6 +14,7 @@
 #' for enrichment analysis.
 #' @param cmp_name (optional) Variable name containing compound names. Default
 #' value is "Name".
+#' @param parl Should stats be run in parallel?
 #' @param core_perc Not used on Windows; Proportion of cores to use for
 #' conducting statistical analysis in parallel.
 #' @return A ChemRICH results data frame.
@@ -31,6 +32,7 @@ msi_stat_crich <- function(
   d_ref,
   cl_name,
   cmp_name = "Name",
+  parl = FALSE,
   core_perc = 0.75
 ) {
   # load data
@@ -48,7 +50,7 @@ msi_stat_crich <- function(
   )
   # Run KS test for each comparison and create separate results df
   cmp1 <- unique(d3[["Comparison.fc"]])
-  if(Sys.info()[["sysname"]] != "Windows") { # nolint
+  if(Sys.info()[["sysname"]] != "Windows" && parl == TRUE) { # nolint
     cr_run <- setNames(
       parallel::mclapply(
         mc.cores = ceiling(parallel::detectCores() * core_perc),
@@ -225,7 +227,7 @@ msi_stat_crich <- function(
       cmp1
     )
   }
-  if(Sys.info()[["sysname"]] == "Windows") { # nolint
+  if(Sys.info()[["sysname"]] == "Windows" | parl == FALSE) { # nolint
     cr_run <- setNames(
       lapply(
         seq.int(1, length(cmp1), 1),

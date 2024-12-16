@@ -188,6 +188,7 @@ msi_data_check <- function(ld = d_seg[["data"]]) { # nolint
 #' fold changes should be calculated. Requires MSI feature metadata if TRUE.
 #' @param grp_class Name of the class annotation column
 #' to use. Ignored when fc_class is FALSE.
+#' @param parl Should stats be run in parallel?
 #' @param core_perc Not used on Windows; Proportion of cores to use for
 #' conducting statistical analysis in parallel.
 #' @return A data frame containing the group-wise
@@ -221,9 +222,10 @@ msi_stat_fc <- function(
   an_name = "Name",
   fc_class = FALSE,
   grp_class = NULL,
+  parl = FALSE,
   core_perc = 0.75
 ) {
-  if(fc_class == FALSE) { # nolint
+  if(Sys.info()[["sysname"]] != "Windows" && parl == TRUE) {if(fc_class == FALSE) { # nolint
     d1 <- mat1
     md1 <- md
     an1 <- an
@@ -343,9 +345,6 @@ msi_stat_fc <- function(
     )
     fold_all[["Comparison.fc"]] <- as.character(fold_all[["Comparison.fc"]])
   }
-
-
-
   if(fc_class == TRUE) { # nolint
     d1 <- mat1
     an1 <- an
@@ -472,6 +471,252 @@ msi_stat_fc <- function(
     )
     fold_all[["Comparison.fc"]] <- as.character(fold_all[["Comparison.fc"]])
   }
+  }
+
+  if(Sys.info()[["sysname"]] == "Windows" | parl == FALSE) {if(fc_class == FALSE) { # nolint
+    d1 <- mat1
+    md1 <- md
+    an1 <- an
+    an2 <- an_name
+    # Group Combinations
+    var_comb <- dplyr::bind_rows(lapply(
+      seq.int(0, length(md_var) - 1, 1),
+      function(x) {
+        cb1 <- combn(md_var, x + 1)
+        cb1 <- as.data.frame(t(
+          dplyr::bind_cols(
+            lapply(
+              as.data.frame(cb1),
+              function(y) paste(y, collapse = ":")
+            )
+          )
+        ))
+        return(cb1)
+      }
+    ))
+
+    fold_comb <- dplyr::bind_rows(
+      lapply(
+        seq.int(1, nrow(var_comb), 1),
+        function(x) {
+          cb1 <- paste(unlist(strsplit(var_comb[x, 1], ":")), sep = ", ")
+          # Change variable to factor
+          cb2 <- setNames(
+            as.data.frame(
+              lapply(
+                cb1,
+                function(y) as.character(md1[, y])
+              )
+            ),
+            c(cb1)
+          )
+          cb2 <- unique(cb2)
+          # Combine columns
+          cb2[["comb"]] <- unlist(
+            lapply(
+              as.data.frame(t(cb2)),
+              function(z) paste(z, collapse = ":")
+            )
+          )
+          # Determine combinations
+          cb2 <- as.data.frame(
+            t(
+              unique(
+                combn(
+                  sort(cb2[["comb"]], decreasing = TRUE),
+                  2
+                )
+              )
+            )
+          )
+          return(cb2)
+        }
+      )
+    )
+    # Metabolite Group Means (excluding missing samples)
+    fold_mean <- dplyr::bind_rows(
+      setNames(
+        lapply(
+          seq.int(1, nrow(var_comb), 1),
+          function(x) {
+            cm1 <- paste(unlist(strsplit(var_comb[x, 1], ":")), sep = ", ")
+            cm2 <- aggregate(
+              d1,
+              lapply(cm1, function(z) as.character(md1[[z]])),
+              function(y) mean(y)
+            )
+            cm2 <- setNames(
+              data.frame(
+                "Group" = unlist(
+                  lapply(
+                    as.data.frame(t(cm2[, 1:length(cm1)])), # nolint
+                    function(z) paste(z, collapse = ":")
+                  )
+                ),
+                cm2[, (length(cm1) + 1):ncol(cm2)]
+              ),
+              c("Group", names(cm2[, (length(cm1) + 1):ncol(cm2)]))
+            )
+            return(cm2)
+          }
+        ),
+        var_comb[[1]]
+      )
+    )
+
+    # Group Fold Changes
+    fun.comb <- function(x, y) {x / y} # nolint
+    fold_all <- setNames(
+      reshape2::melt(
+        dplyr::mutate(dplyr::bind_cols(
+          lapply(
+            seq.int(1, nrow(fold_comb), 1),
+            function(x) {
+              fm1 <- t(
+                fold_mean[fold_mean[[1]] == fold_comb[x, 1], 2:ncol(fold_mean)]
+              )
+              fm2 <- t(
+                fold_mean[fold_mean[[1]] == fold_comb[x, 2], 2:ncol(fold_mean)]
+              )
+              fc1 <- setNames(
+                as.data.frame(fun.comb(fm1, fm2)),
+                paste(fold_comb[x, 1], fold_comb[x, 2], sep = "-")
+              )
+              fc1 <- log2(fc1)
+              return(fc1)
+            }
+          )
+        ), "Name" = an1[[an2]]), id.vars = an2
+      ),
+      c("Name", "Comparison.fc", "Log2FC")
+    )
+    fold_all[["Comparison.fc"]] <- as.character(fold_all[["Comparison.fc"]])
+  }
+  if(fc_class == TRUE) { # nolint
+    d1 <- mat1
+    an1 <- an
+    d1 <- aggregate(
+      t(as.matrix(d1)),
+      list(an1[[grp_class]]),
+      function(x) mean(x)
+    )
+    d1 <- setNames(as.data.frame(t(d1[, 2:ncol(d1)])), d1[[1]])
+    md1 <- md
+
+    # Group Combinations
+    var_comb <- dplyr::bind_rows(lapply(
+      seq.int(0, length(md_var) - 1, 1),
+      function(x) {
+        cb1 <- combn(md_var, x + 1)
+        cb1 <- as.data.frame(t(
+          dplyr::bind_cols(
+            lapply(
+              as.data.frame(cb1),
+              function(y) paste(y, collapse = ":")
+            )
+          )
+        ))
+        return(cb1)
+      }
+    ))
+
+    fold_comb <- dplyr::bind_rows(
+      lapply(
+        seq.int(1, nrow(var_comb), 1),
+        function(x) {
+          cb1 <- paste(unlist(strsplit(var_comb[x, 1], ":")), sep = ", ")
+          # Change variable to factor
+          cb2 <- setNames(
+            as.data.frame(
+              lapply(
+                cb1,
+                function(y) as.character(md1[, y])
+              )
+            ),
+            c(cb1)
+          )
+          cb2 <- unique(cb2)
+          # Combine columns
+          cb2[["comb"]] <- unlist(
+            lapply(
+              as.data.frame(t(cb2)),
+              function(z) paste(z, collapse = ":")
+            )
+          )
+          # Determine combinations
+          cb2 <- as.data.frame(
+            t(
+              unique(
+                combn(
+                  sort(cb2[["comb"]], decreasing = TRUE),
+                  2
+                )
+              )
+            )
+          )
+          return(cb2)
+        }
+      )
+    )
+    # Metabolite Group Means (excluding missing samples)
+    fold_mean <- dplyr::bind_rows(
+      setNames(
+        lapply(
+          seq.int(1, nrow(var_comb), 1),
+          function(x) {
+            cm1 <- paste(unlist(strsplit(var_comb[x, 1], ":")), sep = ", ")
+            cm2 <- aggregate(
+              d1,
+              lapply(cm1, function(z) as.character(md1[[z]])),
+              function(y) mean(y)
+            )
+            cm2 <- setNames(
+              data.frame(
+                "Group" = unlist(
+                  lapply(
+                    as.data.frame(t(cm2[, 1:length(cm1)])), # nolint
+                    function(z) paste(z, collapse = ":")
+                  )
+                ),
+                cm2[, (length(cm1) + 1):ncol(cm2)]
+              ),
+              c("Group", names(cm2[, (length(cm1) + 1):ncol(cm2)]))
+            )
+            return(cm2)
+          }
+        ),
+        var_comb[[1]]
+      )
+    )
+
+    # Group Fold Changes
+    fun.comb <- function(x, y) {x / y} # nolint
+    fold_all <- setNames(
+      reshape2::melt(
+        dplyr::mutate(dplyr::bind_cols(
+          lapply(
+            seq.int(1, nrow(fold_comb), 1),
+            function(x) {
+              fm1 <- t(
+                fold_mean[fold_mean[[1]] == fold_comb[x, 1], 2:ncol(fold_mean)]
+              )
+              fm2 <- t(
+                fold_mean[fold_mean[[1]] == fold_comb[x, 2], 2:ncol(fold_mean)]
+              )
+              fc1 <- setNames(
+                as.data.frame(fun.comb(fm1, fm2)),
+                paste(fold_comb[x, 1], fold_comb[x, 2], sep = "-")
+              )
+              fc1 <- log2(fc1)
+              return(fc1)
+            }
+          )
+        ), "Name" = names(d1)), id.vars = an2
+      ),
+      c("Name", "Comparison.fc", "Log2FC")
+    )
+    fold_all[["Comparison.fc"]] <- as.character(fold_all[["Comparison.fc"]])
+  }}
 
   return(fold_all)
 }
@@ -497,6 +742,7 @@ msi_stat_fc <- function(
 #' than individual compounds should be tested for significant differences.
 #' @param grp_class1 If fc_class1 is TRUE, which variable should be used
 #' to group individual compounds into separate compound classes?
+#' @param parl Should stats be run in parallel?
 #' @param core_perc Not used on Windows; Proportion of cores to use for
 #' conducting statistical analysis in parallel.
 #' @return A data frame containing the combined ANOVA and fold change results
@@ -527,9 +773,10 @@ msi_stat_anova <- function( # nolint
   an_name = "Name",
   fc_class1 = FALSE,
   grp_class1 = NULL,
+  parl = FALSE,
   core_perc = 0.75
 ) { # nolint
-  if(Sys.info()[["sysname"]] != "Windows") { # nolint
+  if(Sys.info()[["sysname"]] != "Windows"  && parl == TRUE) { # nolint
     if(fc_class1 == FALSE){ # nolint
       # Determine interactions between selected variables
       # Load data
@@ -664,7 +911,8 @@ msi_stat_anova <- function( # nolint
         an = an1,
         an_name = an2,
         fc_class = fc_class1,
-        grp_class = grp_class1
+        grp_class = grp_class1,
+        parl = parl
       )
 
       # Fix anova comparisons to match fold change comparisons
@@ -841,7 +1089,8 @@ msi_stat_anova <- function( # nolint
         an = an1,
         an_name = an2,
         fc_class = fc_class1,
-        grp_class = grp_class1
+        grp_class = grp_class1,
+        parl = parl
       )
 
       # Fix anova comparisons to match fold change comparisons
@@ -878,7 +1127,7 @@ msi_stat_anova <- function( # nolint
       )
     }
   }
-  if(Sys.info()[["sysname"]] == "Windows") { # nolint
+  if(Sys.info()[["sysname"]] == "Windows" | parl == FALSE) { # nolint
     if(fc_class1 == FALSE){ # nolint
       # Determine interactions between selected variables
       # Load data
@@ -1010,7 +1259,8 @@ msi_stat_anova <- function( # nolint
         an = an1,
         an_name = an2,
         fc_class = fc_class1,
-        grp_class = grp_class1
+        grp_class = grp_class1,
+        parl = parl
       )
 
       # Fix anova comparisons to match fold change comparisons
@@ -1184,7 +1434,8 @@ msi_stat_anova <- function( # nolint
         an = an1,
         an_name = an2,
         fc_class = fc_class1,
-        grp_class = grp_class1
+        grp_class = grp_class1,
+        parl = parl
       )
 
       # Fix anova comparisons to match fold change comparisons

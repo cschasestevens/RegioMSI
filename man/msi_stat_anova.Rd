@@ -13,6 +13,7 @@ msi_stat_anova(
   an_name = "Name",
   fc_class1 = FALSE,
   grp_class1 = NULL,
+  parl = FALSE,
   core_perc = 0.75
 )
 }
@@ -35,6 +36,8 @@ than individual compounds should be tested for significant differences.}
 
 \item{grp_class1}{If fc_class1 is TRUE, which variable should be used
 to group individual compounds into separate compound classes?}
+
+\item{parl}{Should stats be run in parallel?}
 
 \item{core_perc}{Not used on Windows; Proportion of cores to use for
 conducting statistical analysis in parallel.}

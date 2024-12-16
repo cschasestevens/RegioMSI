@@ -19,6 +19,7 @@ knitr::opts_chunk$set(
 ### **Important:**
 #### - Set **"eval ="** to **"F"** to skip execution of code chunk.
 #### - Recommended hardware specs: Windows >10 with 128Gb of RAM OR Linux Ubuntu >22.04 with 128Gb of RAM
+#### - Use parallel::mclapply and set core number to run compatible functions in parallel (not covered by this tutorial but examples can be found in package documentation)
 
 ## 1.1. Installation of package and dependencies
 ```{r inst, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
@@ -74,7 +75,7 @@ d <- testd
 d2 <- msi_peak_proc(
   ld = d[["Data.files"]],
   lp = lp1,
-  parl = TRUE,
+  parl = FALSE,
   core_perc = 0.2
 )
 d2
@@ -130,7 +131,7 @@ data_qc <- msi_data_qc(
   dm = d_norm[["Data"]],
   feat = d_norm[["Feature"]],
   pix = d_norm[["Pixel"]],
-  parl = TRUE,
+  parl = FALSE,
   core_perc = 0.5
 )
 head(data_qc)
@@ -164,7 +165,7 @@ d_norm2_b1 <- msi_data_norm(
   feat = dl[["b1"]][[2]],
   pix = dl[["b1"]][[3]],
   mtd = "sLOESS",
-  parl = TRUE,
+  parl = FALSE,
   core_perc = 0.9
 )
 # Recombine batches or save data
@@ -177,8 +178,7 @@ d_norm2 <- list(
   "norm.method" = "sLOESS"
 )
 ## Recalculate TIC for QC
-d_norm2[["pixels"]][["TIC.norm.sloess"]] <- unlist(parallel::mclapply(
-  mc.cores = parallel::detectCores() * 0.9,
+d_norm2[["pixels"]][["TIC.norm.sloess"]] <- unlist(lapply(
   seq.int(1, ncol(t(as.matrix(d_norm2[["data"]]))), 1),
   function(x) sum(d_norm2[["data"]][x, ])
 ))
@@ -215,8 +215,7 @@ ptic_img
 d_norm2[["data"]]
 ## For each sample (use lapply if on Windows)
 l_seg <- setNames(
-  parallel::mclapply(
-    mc.cores = 2,
+  lapply(
     seq.int(1, length(unique(as.character(d_norm2[["pixels"]][["ID"]]))), 1),
     function(x) {
       s1 <- msi_segment(
@@ -361,8 +360,7 @@ head(d_stat1)
 ### IMPORTANT: Must have at least 3 samples/group to work correctly
 d_seg2 <- list(
   "data.pareto" = purrr::reduce(
-    parallel::mclapply(
-      mc.cores = 12,
+    lapply(
       seq.int(1, ncol(d_seg[["data"]])),
       function(x) {
         setNames(aggregate(
@@ -376,8 +374,7 @@ d_seg2 <- list(
     by = "ID"
   )[, -1],
   "data" = purrr::reduce(
-    parallel::mclapply(
-      mc.cores = 12,
+    lapply(
       seq.int(1, ncol(d_seg[["data"]])),
       function(x) {
         setNames(aggregate(
