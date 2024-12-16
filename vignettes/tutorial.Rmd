@@ -46,7 +46,7 @@ BiocManager::install("Cardinal")
 
 ## 2.1. Data Import
 #### Loads all .imzML files from specified folder 
-```{r impt, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r impt, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
 library(RegioMSI)
 # Dataset input parameters (replace with local file location)
 # Use msi_load_data() to load all samples present in the chosen directory
@@ -65,7 +65,7 @@ d <- testd
 
 ## 2.2. Processing: Peak Detection, Alignment, Binning, and Annotation
 #### Performs peak detection, alignment, binning, peak annotation, and assignment for all study samples. Detection and alignment are performed simultaneously to produce a single peak list for the entire dataset. Peaks from each sample are binned to the resulting reference list to convert data from profile to centroid and are used for downstream analyses. Peak annotations are optional but generally correspond to a list of compounds validated by LC-MS/MS.
-```{r proc, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r proc, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
 #---- Peak detection ----
 # Perform all peak processing;
 # Previous versions of Cardinal required
@@ -107,17 +107,17 @@ d2a[["Data.filtered"]]
 
 ## 2.3. Post-processing: Artifact Removal and Normalization
 #### Converts MSI experiment objects produced by Cardinal R to dense matrices after annotating peaks. This increases memory consumption but enables greater compatibility and faster calculation of normalization methods from other R packages. Two different normalization methods are tested in this script and compared to pre-normalized data, traditional total ion current (TIC) normalization and sparse locally estimated scatterplot smoothing (sLOESS) normalization. sLOESS is adapted from LOESS normalization in untargeted LC-MS/MS-based metabolomics assays and performs LOESS normalization for every non-zero intensity pixel in each image across multiple sample runs. This method addresses intra- and intersample signal drift in MSI experiments whereas TIC normalization in MSI is traditionally implemented on a per-sample basis and does not directly account for systematic variation in signal intensity.
-```{r norm, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r norm, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
 #---- Format MSImagingExperiment ----
 # Load processed data, annotation list, and metadata table (see example)
 names(d2a)
 Cardinal::imageData(d2a[["Data.original"]])
 ## Format
 d_norm <- msi_norm_form(
-  ldp = d2a[["Data.filtered"]],
-  la = d2a[["Annotated"]],
+  ldp = d2a[["Data.original"]],
+  la = d2a[["All"]],
   md = md1,
-  ftype = "annotated"
+  ftype = "all"
 )
 names(d_norm)
 head(d_norm[["Data"]])
@@ -207,17 +207,12 @@ ptic_img
 
 # 3.1. Image Segmentation, Clustering, and Region Assignment
 #### Implements the scRNA-Seq clustering approach used by the R package Seurat to perform segmentation analysis and clustering of MSI data. Briefly, Seurat utilizes a K-nearest neighbor graph to partition all data points into individual 'communities' and evaluates overlapping communities based on their Jaccard similarity scores. This algorithm uses annotated compounds as input and therefore reduces bias introduced by technical artifacts and dramatically reduces the time necessary to generate segmented images. Furthermore, this method reliably partitions regions in tissue types with highly heterogenous morphology (e.g. lung tissue).
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
 #---- Image Segmentation ----
 # Segment based on all features after artifact removal
 # Either perform segmentation for all samples or individually
 ## For all samples
-d_seg1 <- msi_segment(
-  df = t(as.matrix(d_norm2[["data"]])),
-  md = d_norm2[["pixels"]],
-  var_id = "ID",
-  clus_res = 0.8
-)
+d_norm2[["data"]]
 ## For each sample (use lapply if on Windows)
 l_seg <- setNames(
   parallel::mclapply(
@@ -319,7 +314,7 @@ unique(d_seg[["pixels"]][, c("ID", "region")])
 
 # 3.2. Colocalization to specific region
 #### Plots ion images with cluster overlays to determine compound localization to a specific region.
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
 # Plot ion images with region overlay
 d_seg[["data"]] <- setNames(
   as.data.frame(d_seg[["data"]]),
@@ -341,7 +336,7 @@ coloc1
 
 # 4.1. Statistical Analysis
 #### Statistical methods for comparing compound intensities between samples, regions, or a combination of variables.
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
 # Count pixels per group
 cnt_pix <- msi_cnt_pix(
   mdf = d_seg[["pixels"]],
@@ -422,27 +417,25 @@ p_vol
 
 # 4.2. ChemRICH
 #### Conducts ChemRICH analysis for each comparison in a provided result generated by msi_stat_anova() (default) or from a single ChemRICH input (in development).
-```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
+```{r, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
 # Run ChemRICH
+## IMPORTANT: only works for datasets with annotated compounds
+d_seg2[["features"]][["label.test"]] <- ifelse(
+  d_seg2[["features"]][["Count"]] < 100,
+  "low",
+  "high"
+)
 d_enr <- msi_stat_crich(
   d_stat = d_stat1,
   d_ref = d_seg2[["features"]],
-  cl_name = "label.saturation"
+  cl_name = "label.test"
 )
 head(d_enr)
 # Plot
 unique(d_enr[["Comparison"]])
 p_enr <- msi_plot_crich(
   dfcr = d_enr[d_enr[["Comparison"]] == "M.SFA-M.HO3", ],
-  cl_name = "label.saturation"
+  cl_name = "label.test"
 )
-ggplot2::ggsave(
-  paste(
-    "analysis/plot.", lp1[["polarity"]], ".chemrich.msfa.vs.mho3.png", sep = ""
-  ),
-  p_enr,
-  width = 10,
-  height = 10,
-  dpi = 800
-)
+p_enr
 ```
