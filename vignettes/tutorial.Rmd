@@ -58,29 +58,24 @@ lp1 <- msi_input_param(
   mz_res = 5
 )
 # Load all .imzML
-data("testd", package = "RegioMSI")
 data("an1", package = "RegioMSI")
 data("md1", package = "RegioMSI")
-d <- testd
 ```
 
 ## 2.2. Processing: Peak Detection, Alignment, Binning, and Annotation
 #### Performs peak detection, alignment, binning, peak annotation, and assignment for all study samples. Detection and alignment are performed simultaneously to produce a single peak list for the entire dataset. Peaks from each sample are binned to the resulting reference list to convert data from profile to centroid and are used for downstream analyses. Peak annotations are optional but generally correspond to a list of compounds validated by LC-MS/MS.
-```{r proc, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
+```{r proc, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=F}
 #---- Peak detection ----
 # Perform all peak processing;
 # Previous versions of Cardinal required
 # a separate peak binning step, which is
-# no longer applicable in newer versions
+# no longer applicable in newer versions.
 d2 <- msi_peak_proc(
   ld = d[["Data.files"]],
   lp = lp1,
   parl = FALSE,
   core_perc = 0.2
 )
-d2
-names(d2)
-
 #---- Peak annotation ----
 # Requires:
 # - Processed peaks from previous step
@@ -111,15 +106,8 @@ d2a[["Data.filtered"]]
 ```{r norm, echo=T, fig.align= "center", results=T, message=T, warning=T, eval=T}
 #---- Format MSImagingExperiment ----
 # Load processed data, annotation list, and metadata table (see example)
-names(d2a)
-Cardinal::imageData(d2a[["Data.original"]])
 ## Format
-d_norm <- msi_norm_form(
-  ldp = d2a[["Data.original"]],
-  la = d2a[["All"]],
-  md = md1,
-  ftype = "all"
-)
+data("d_norm", package = "RegioMSI")
 names(d_norm)
 head(d_norm[["Data"]])
 head(d_norm[["Feature"]])

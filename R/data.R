@@ -41,9 +41,9 @@
 #' Demo Data
 #'
 #' A subset of data from Stevens et. al. 2024 for two
-#' samples acquired by MALDI-TOF MS.
+#' samples acquired by MALDI-TOF MS processed by msi_peak_proc().
 #'
-#' @format ## `testd`
+#' @format ## `d_norm`
 #' A list of length 2:
 #' \describe{
 #'   \item{Sample.Info}{
@@ -53,4 +53,4 @@
 #'   ...
 #' }
 #' @source Stevens et. al. 2024
-"testd"
+"d_norm"
