@@ -43,7 +43,7 @@ Provides functions for region-specific statistical analysis of biological replic
         * EnhancedVolcano
 
 ### Installation
-* Run the following in a new R session on the command line or within R-Studio:
+* Package installation and running test data can be completed in under 1 minute. Run the following in a new R session on the command line or within R-Studio to install the package with vignettes:
 
 ```
 devtools::install_github(
