@@ -699,13 +699,6 @@ msi_stat_anova <- function( # nolint
         fold_all,
         by = c("Comparison.fc", "Name")
       )
-      write.table(
-        d_out,
-        "analysis/table.stats.txt",
-        col.names = TRUE,
-        row.names = FALSE,
-        sep = "\t"
-      )
     }
 
     if(fc_class1 == TRUE){ # nolint
@@ -882,13 +875,6 @@ msi_stat_anova <- function( # nolint
         ),
         fold_all,
         by = c("Comparison.fc", "Name")
-      )
-      write.table(
-        d_out,
-        "analysis/table.stats.class.txt",
-        col.names = TRUE,
-        row.names = FALSE,
-        sep = "\t"
       )
     }
   }
@@ -1059,14 +1045,6 @@ msi_stat_anova <- function( # nolint
         fold_all,
         by = c("Comparison.fc", "Name")
       )
-      head(d_out)
-      write.table(
-        d_out,
-        "analysis/table.stats.txt",
-        col.names = TRUE,
-        row.names = FALSE,
-        sep = "\t"
-      )
     }
 
     if(fc_class1 == TRUE){ # nolint
@@ -1239,13 +1217,6 @@ msi_stat_anova <- function( # nolint
         ),
         fold_all,
         by = c("Comparison.fc", "Name")
-      )
-      write.table(
-        d_out,
-        "analysis/table.stats.class.txt",
-        col.names = TRUE,
-        row.names = FALSE,
-        sep = "\t"
       )
     }
   }

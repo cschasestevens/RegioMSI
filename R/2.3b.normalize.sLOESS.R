@@ -601,7 +601,7 @@ msi_plot_img <- function(
     if(ptype == "regions" | ptype == "coloc") { # nolint
       c1 <- ggplot2::scale_fill_manual(
         name = "Region",
-        values = col_univ()
+        values = col_univ() # nolint
       )
     }
     if(ptype == "coloc") { # nolint
@@ -698,7 +698,7 @@ msi_plot_img <- function(
     if(ptype == "regions" | ptype == "coloc") { # nolint
       c1 <- ggplot2::scale_fill_manual(
         name = "Region",
-        values = col_univ()
+        values = col_univ() # nolint
       )
     }
     if(spl_reg == FALSE) { # nolint

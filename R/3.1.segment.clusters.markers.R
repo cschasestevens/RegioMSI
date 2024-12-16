@@ -330,13 +330,6 @@ msi_marker_heatmap <- function(
       densify = TRUE,
       verbose = TRUE
     )
-    write.table(
-      cl_mark,
-      "analysis/table.marker.features.txt",
-      col.names = TRUE,
-      row.names = FALSE,
-      sep = "\t"
-    )
   }
   if(file.exists("analysis/table.marker.features.txt")) { # nolint
     cl_mark <- read.table(
@@ -378,14 +371,6 @@ msi_marker_heatmap <- function(
     "feature",
     "cluster"
   )]
-  #### Save table
-  write.table(
-    cl_mark,
-    "analysis/table.marker.features.top10.txt",
-    row.names = FALSE,
-    col.names = TRUE,
-    sep = "\t"
-  )
   ### Subset seurat and scale
   h <- SeuratObject::FetchData(
     d,
@@ -492,5 +477,5 @@ msi_marker_heatmap <- function(
     cluster_columns = cl_c,
     cluster_rows = cl_r,
   )
-  return(h_out)
+  return(list("markers" = cl_mark, "plot" = h_out))
 }

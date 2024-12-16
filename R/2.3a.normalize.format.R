@@ -85,25 +85,6 @@ msi_norm_form <- function(ldp, la, md, ftype) {
   ## bring spectra into memory
   d_mat <- t(Cardinal::as.matrix(Cardinal::spectra(d, "intensity")))
 
-  ## Save objects for downstream analysis
-  ### feature metadata
-  write.table(
-    md_feat,
-    paste("analysis/table.", lp1[["polarity"]], ".meta.feat.txt", sep = ""), # nolint
-    col.names = TRUE,
-    row.names = FALSE,
-    sep = "\t"
-  )
-  ### pixel metadata
-  write.table(
-    md_samp,
-    paste("analysis/table.", lp1[["polarity"]], ".meta.samp.txt", sep = ""), # nolint
-    col.names = TRUE,
-    row.names = FALSE,
-    sep = "\t"
-  )
-  ### data matrix
-  saveRDS(d_mat, paste("analysis/data.", lp1[["polarity"]], ".matrix.rds", sep = "")) # nolint
   return(
     list(
       "Data" = d_mat,
