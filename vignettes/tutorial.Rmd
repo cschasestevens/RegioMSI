@@ -73,6 +73,13 @@ data("md1", package = "RegioMSI")
 # a separate peak binning step, which is
 # no longer applicable in newer versions.
 d2 <- msi_peak_proc(
+  # Process .imzml files in the directory specified in object lp1
+  # NOTE: .imzml files are not available as example data directly from
+  # this package vignette but can be downloaded separately from
+  # DOI: https://doi.org/10.5281/zenodo.14846221
+  # Object "d" is a list of length 2 with the names
+  # "Sample.Info" and "Data.files". The "Data.files" element contains the
+  # file name for each .imzml file in the folder specified in lp1.
   ld = d[["Data.files"]],
   lp = lp1,
   parl = FALSE,
@@ -378,17 +385,15 @@ d_seg2 <- list(
   "norm.method" = "sLOESS"
 )
 d_stat <- msi_stat_anova(
-  matpv = d_seg2[["data.pareto"]],
+  matpv = d_seg2[["data"]],
   matfc = d_seg2[["data"]],
   md = d_seg2[["pixels"]],
   md_var = c("Group"),
   an = d_seg2[["features"]]
 )
-head(d_stat)
-
 # Plot statistical results as a volcano plot
 p_vol <- msi_plot_volcano(
-  d_stat = d_stat1,
+  d_stat = d_stat,
   comp_name = "M.SFA-M.HO3",
   f_cut = 0.25,
   f_lim = 6,
@@ -409,13 +414,11 @@ d_seg2[["features"]][["label.test"]] <- ifelse(
   "high"
 )
 d_enr <- msi_stat_crich(
-  d_stat = d_stat1,
+  d_stat = d_stat,
   d_ref = d_seg2[["features"]],
-  cl_name = "label.test"
+  cl_name = "label.saturation"
 )
-head(d_enr)
 # Plot
-unique(d_enr[["Comparison"]])
 p_enr <- msi_plot_crich(
   dfcr = d_enr[d_enr[["Comparison"]] == "M.SFA-M.HO3", ],
   cl_name = "label.test"

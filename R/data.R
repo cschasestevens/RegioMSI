@@ -1,11 +1,11 @@
-#' Sample Annotation Data
+#' Sample Data Set
 #'
 #' A subset of data from Stevens et. al. 2024 containing LC-MS/MS based
 #' annotations for validating peak IDs from a mass spectrometry imaging
 #' dataset.
 #'
-#' @format ## `an1`
-#' A data frame with 644 rows and 9 columns:
+#' @format ## `example`
+#' A data frame with 85 rows and 982 columns:
 #' \describe{
 #'   \item{Criteria}{matching criteria for annotation}
 #'   \item{Level}{confidence level}
